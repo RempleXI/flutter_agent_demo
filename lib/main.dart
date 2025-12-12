@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'config.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -37,6 +38,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final List<ChatMessage> _messages = [];
   final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
 
   // 发送消息到AI API
@@ -49,21 +51,23 @@ class _MyHomePageState extends State<MyHomePage> {
       _isLoading = true;
     });
 
+    // 滚动到最新消息
+    _scrollToBottom();
+
     try {
       // 使用硅基流动(SiliconFlow)的DeepSeek API
       final response = await http.post(
         Uri.parse(ApiConfig.siliconFlowBaseUrl),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization':
-              'Bearer ${ApiConfig.siliconFlowApiKey}',
+          'Authorization': 'Bearer ${ApiConfig.siliconFlowApiKey}',
         },
         body: jsonEncode({
           'model': ApiConfig.modelName,
           'messages': [
-            {'role': 'user', 'content': text}
+            {'role': 'user', 'content': text},
           ],
-          'stream': false
+          'stream': false,
         }),
       );
 
@@ -76,7 +80,12 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       } else {
         setState(() {
-          _messages.add(ChatMessage(text: 'API请求失败，状态码: ${response.statusCode}', isUser: false));
+          _messages.add(
+            ChatMessage(
+              text: 'API请求失败，状态码: ${response.statusCode}',
+              isUser: false,
+            ),
+          );
         });
       }
     } catch (e) {
@@ -87,7 +96,28 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         _isLoading = false;
       });
+      // AI回复后再次滚动到底部
+      _scrollToBottom();
     }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _textController.dispose();
+    super.dispose();
   }
 
   @override
@@ -101,6 +131,7 @@ class _MyHomePageState extends State<MyHomePage> {
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scrollController,
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index >= _messages.length) {
@@ -115,14 +146,14 @@ class _MyHomePageState extends State<MyHomePage> {
                             color: Colors.blue[50],
                             borderRadius: BorderRadius.circular(8.0),
                             border: Border.all(
-                              color: Colors.blue,
+                              color: const Color.fromARGB(255, 177, 197, 213),
                               width: 2.0,
                             ),
                           ),
                           child: const Row(
                             children: [
                               CircularProgressIndicator(),
-                              SizedBox(width: 10),
+                              SizedBox(width: 5),
                               Text(
                                 'AI正在思考...',
                                 style: TextStyle(
@@ -168,30 +199,81 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _buildMessageItem(ChatMessage message) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-      child: Row(
-        mainAxisAlignment: message.isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12.0),
-            decoration: BoxDecoration(
-              color: message.isUser ? Colors.blue[100] : Colors.grey[300],
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            child: Text(
-              message.text,
-              style: const TextStyle(
-                fontSize: 16.0,
-                fontWeight: FontWeight.normal,
+    if (message.isUser) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Colors.blue[100],
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                child: SelectableText(
+                  message.text,
+                  style: const TextStyle(
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    } else {
+      // AI消息，添加复制按钮
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              child: SelectableText(
+                message.text,
+                style: const TextStyle(
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ),
+            // 使用GestureDetector包装复制按钮以准确定义点击区域
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: message.text));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('已复制到剪贴板'))
+                );
+              },
+              child: Container(
+                height: 24,
+                width: 24,
+                margin: const EdgeInsets.only(left: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                    )
+                  ]
+                ),
+                child: const Icon(Icons.copy, size: 16),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
 
