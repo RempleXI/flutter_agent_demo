@@ -105,9 +105,9 @@ class _CopyButtonState extends State<CopyButton> with SingleTickerProviderStateM
   OverlayEntry _createOverlayEntry() {
     return OverlayEntry(
       builder: (context) => Positioned(
-        // 定位在屏幕底部中央
-        bottom: 100,
-        left: MediaQuery.of(context).size.width * 0.5 - 75, // 居中 (150/2)
+        // 定位在右侧聊天区域的中心
+        top: MediaQuery.of(context).size.height * 0.5 - 20,
+        left: MediaQuery.of(context).size.width * 0.5 + (MediaQuery.of(context).size.width * 0.5 - 150) / 2, // 右侧区域居中
         child: FadeTransition(
           opacity: _opacityAnimation,
           child: Container(

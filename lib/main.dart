@@ -2,9 +2,22 @@ import 'package:flutter/material.dart';
 import 'widgets/chat_message_item.dart';
 import 'models/chat_message.dart';
 import 'services/api_service.dart';
+import 'widgets/file_section.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart';
 
 void main() {
   runApp(const MyApp());
+  
+  // 设置窗口属性
+  doWhenWindowReady(() {
+    final win = appWindow;
+    const initialSize = Size(1024, 768);
+    win.minSize = initialSize;
+    win.size = initialSize;
+    win.alignment = Alignment.center;
+    win.title = "AI Chat Demo";
+    win.show();
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -100,23 +113,70 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              itemCount: _messages.length + (_isLoading ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index >= _messages.length) {
-                  return _buildLoadingIndicator();
-                }
-                return ChatMessageItem(message: _messages[index]);
-              },
+      body: Container(
+        constraints: const BoxConstraints(minWidth: 1024, minHeight: 768),
+        child: Row(
+          children: [
+            // 左侧四个区域 - 分为上下两排，每排两个区域
+            Expanded(
+              flex: 1,
+              child: _buildLeftPanel(),
             ),
-          ),
-          _buildInputArea(),
-        ],
+            // 右侧聊天区域
+            Expanded(
+              flex: 1,
+              child: _buildChatPanel(),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildLeftPanel() {
+    return Column(
+      children: [
+        // 上排两个区域
+        Expanded(
+          flex: 1,
+          child: Row(
+            children: const [
+              Expanded(child: FileSection(title: '等待')),
+              Expanded(child: FileSection(title: '读取')),
+            ],
+          ),
+        ),
+        // 下排两个区域
+        Expanded(
+          flex: 1,
+          child: Row(
+            children: const [
+              Expanded(child: FileSection(title: '模板')),
+              Expanded(child: FileSection(title: '结果')),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChatPanel() {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            itemCount: _messages.length + (_isLoading ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index >= _messages.length) {
+                return _buildLoadingIndicator();
+              }
+              return ChatMessageItem(message: _messages[index]);
+            },
+          ),
+        ),
+        _buildInputArea(),
+      ],
     );
   }
 

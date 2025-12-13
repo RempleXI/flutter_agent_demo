@@ -3,6 +3,7 @@ import 'package:flutter_markdown_selectionarea/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../models/chat_message.dart';
 import 'copy_button.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BubbleWithCopyButton extends StatefulWidget {
   final ChatMessage message;
@@ -56,9 +57,77 @@ class _BubbleWithCopyButtonState extends State<BubbleWithCopyButton> {
                           color: Color(0xFFCCCCCC),
                           borderRadius: BorderRadius.circular(4.0),
                         ),
+                        // 添加链接样式
+                        a: const TextStyle(
+                          color: Colors.blue,
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                       // 添加自定义构建器以改善代码块选中效果
                       builders: {'code': CodeElementBuilder()},
+                      // 添加链接点击处理
+                      onTapLink:
+                          (String url, String? title, String? text) async {
+                            // 检查url是否是有效的URL，如果不是，尝试使用title
+                            String actualUrl = url;
+                            // 检查url是否包含有效的协议
+                            bool isUrlValid =
+                                url.startsWith('http://') ||
+                                url.startsWith('https://');
+
+                            // 如果url不是有效的URL，但title是有效的URL，则使用title
+                            if (!isUrlValid &&
+                                title != null &&
+                                (title.startsWith('http://') ||
+                                    title.startsWith('https://'))) {
+                              actualUrl = title;
+                            }
+
+                            try {
+                              // 首先尝试直接使用实际的URL
+                              final uri = Uri.parse(actualUrl);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                                return;
+                              }
+                            } catch (e) {
+                              // 忽略首次解析错误
+                            }
+
+                            try {
+                              // 如果URL包含明显的协议，则尝试编码后解析
+                              if (actualUrl.startsWith('http://') ||
+                                  actualUrl.startsWith('https://')) {
+                                final encodedUrl = Uri.encodeFull(actualUrl);
+                                final uri = Uri.parse(encodedUrl);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri);
+                                  return;
+                                }
+                              }
+                            } catch (e) {
+                              // 忽略编码后解析错误
+                            }
+
+                            try {
+                              // 如果URL看起来像一个域名（包含点号且不含空格等非法字符），则添加https协议
+                              if (actualUrl.contains('.') &&
+                                  !actualUrl.contains(' ') &&
+                                  !actualUrl.contains('\n') &&
+                                  RegExp(
+                                    r'^[a-zA-Z0-9.-]+$',
+                                  ).hasMatch(actualUrl)) {
+                                final fullUrl = 'https://$actualUrl';
+                                final uri = Uri.parse(fullUrl);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri);
+                                  return;
+                                }
+                              }
+                            } catch (e) {
+                              // 忽略添加协议后解析错误
+                            }
+                          },
                     ),
                   ),
                 ),

@@ -37,6 +37,8 @@ dependencies:
   http: ^1.2.0
   flutter_markdown: ^0.7.1
   flutter_markdown_selectionarea: ^0.6.17+1
+  bitsdojo_window: ^0.1.5
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_test:
