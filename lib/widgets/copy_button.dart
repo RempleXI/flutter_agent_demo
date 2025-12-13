@@ -16,6 +16,8 @@ class _CopyButtonState extends State<CopyButton> with SingleTickerProviderStateM
   late AnimationController _controller;
   late Animation<double> _opacityAnimation;
   OverlayEntry? _overlayEntry;
+  // 保存 overlay 的引用
+  OverlayState? _overlayState;
 
   @override
   void initState() {
@@ -34,6 +36,13 @@ class _CopyButtonState extends State<CopyButton> with SingleTickerProviderStateM
       parent: _controller,
       curve: Curves.easeInOut,
     ));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 在 widget 依赖关系改变时保存 overlay 引用
+    _overlayState = Overlay.of(context);
   }
 
   @override
@@ -85,7 +94,8 @@ class _CopyButtonState extends State<CopyButton> with SingleTickerProviderStateM
     
     // 创建新的overlay
     _overlayEntry = _createOverlayEntry();
-    Overlay.of(context).insert(_overlayEntry!);
+    // 使用保存的 overlay 引用而不是通过 context 查找
+    _overlayState?.insert(_overlayEntry!);
     
     // 淡入动画
     _controller.forward().then((_) {

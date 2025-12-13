@@ -53,6 +53,12 @@ class _MyHomePageState extends State<MyHomePage> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _textFieldFocusNode = FocusNode();
   bool _isLoading = false;
+  
+  // 为每个区域创建 GlobalKey
+  final GlobalKey<FileSectionState> _waitingSectionKey = GlobalKey();
+  final GlobalKey<FileSectionState> _readSectionKey = GlobalKey();
+  final GlobalKey<FileSectionState> _templateSectionKey = GlobalKey();
+  final GlobalKey<FileSectionState> _resultSectionKey = GlobalKey();
 
   // 发送消息
   Future<void> _sendMessage(String text) async {
@@ -98,6 +104,14 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void _refreshAllSections() {
+    // 调用每个区域的刷新方法
+    [_waitingSectionKey, _readSectionKey, _templateSectionKey, _resultSectionKey]
+        .map((key) => key.currentState)
+        .whereType<FileSectionState>()
+        .forEach((state) => state.refreshFiles());
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -140,9 +154,21 @@ class _MyHomePageState extends State<MyHomePage> {
         Expanded(
           flex: 1,
           child: Row(
-            children: const [
-              Expanded(child: FileSection(title: '等待')),
-              Expanded(child: FileSection(title: '读取')),
+            children: [
+              Expanded(
+                child: FileSection(
+                  key: _waitingSectionKey,
+                  title: '等待',
+                  onFilesChanged: _refreshAllSections,
+                ),
+              ),
+              Expanded(
+                child: FileSection(
+                  key: _readSectionKey,
+                  title: '读取',
+                  onFilesChanged: _refreshAllSections,
+                ),
+              ),
             ],
           ),
         ),
@@ -150,9 +176,21 @@ class _MyHomePageState extends State<MyHomePage> {
         Expanded(
           flex: 1,
           child: Row(
-            children: const [
-              Expanded(child: FileSection(title: '模板')),
-              Expanded(child: FileSection(title: '结果')),
+            children: [
+              Expanded(
+                child: FileSection(
+                  key: _templateSectionKey,
+                  title: '模板',
+                  onFilesChanged: _refreshAllSections,
+                ),
+              ),
+              Expanded(
+                child: FileSection(
+                  key: _resultSectionKey,
+                  title: '结果',
+                  onFilesChanged: _refreshAllSections,
+                ),
+              ),
             ],
           ),
         ),
