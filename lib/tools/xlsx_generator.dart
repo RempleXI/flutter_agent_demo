@@ -169,11 +169,15 @@ class XlsxGenerator {
   ///     }
   ///   }
   /// }
-  /// 其中RxCy表示第x行第y列（从0开始计数）
+  /// 其中RxCy表示第x行第y列（从1开始计数）
   Future<String> generateXlsxFromJson(String jsonData, String fileName) async {
     try {
+      // 清理JSON数据中的控制字符
+      String cleanedJsonData = jsonData
+          .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '');
+          
       // 解析JSON数据，转换为Map对象
-      final Map<String, dynamic> response = jsonDecode(jsonData);
+      final Map<String, dynamic> response = jsonDecode(cleanedJsonData);
       // 获取data部分的数据
       final Map<String, dynamic> tableData = response['data'];
       // 获取cells部分的数据，这部分包含了所有的单元格数据
@@ -193,10 +197,10 @@ class XlsxGenerator {
 
         // 如果找到匹配项
         if (match != null) {
-          // 提取行号（第一个捕获组）
-          final int row = int.parse(match.group(1)!);
-          // 提取列号（第二个捕获组）
-          final int column = int.parse(match.group(2)!);
+          // 提取行号（第一个捕获组），并减1以适应0基索引
+          final int row = int.parse(match.group(1)!) - 1;
+          // 提取列号（第二个捕获组），并减1以适应0基索引
+          final int column = int.parse(match.group(2)!) - 1;
 
           // 在对应位置设置单元格的值
           sheet
@@ -224,7 +228,86 @@ class XlsxGenerator {
       return filePath;
     } catch (e) {
       // 如果发生任何错误，抛出带有详细信息的异常
-      throw Exception('Failed to generate XLSX file from JSON: $e');
+      throw Exception('Failed to generate XLSX file from JSON: $e. Original JSON: $jsonData');
+    }
+  }
+  
+  /// 将JSON格式表格数据转换为XLSX文件（带冲突解决）
+  ///
+  /// 参数:
+  /// - jsonData: 包含表格数据的JSON格式字符串
+  /// - fileName: 要保存的Excel文件名（不含扩展名）
+  ///
+  /// 返回值:
+  /// - Future<String>: 生成的Excel文件的完整路径
+  Future<String> generateXlsxFromJsonWithConflictResolution(String jsonData, String fileName) async {
+    try {
+      // 清理JSON数据中的控制字符
+      String cleanedJsonData = jsonData
+          .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '');
+          
+      // 解析JSON数据，转换为Map对象
+      final Map<String, dynamic> response = jsonDecode(cleanedJsonData);
+      // 获取data部分的数据
+      final Map<String, dynamic> tableData = response['data'];
+      // 获取cells部分的数据，这部分包含了所有的单元格数据
+      final Map<String, dynamic> cells = tableData['cells'];
+
+      // 创建一个新的Excel工作簿
+      final excel = Excel.createExcel();
+      // 获取默认的工作表Sheet1
+      final sheet = excel['Sheet1'];
+
+      // 遍历所有单元格数据
+      cells.forEach((key, value) {
+        // 定义正则表达式来匹配RxCy格式的坐标（如R1C2表示第1行第2列）
+        final RegExp regExp = RegExp(r'R(\d+)C(\d+)');
+        // 在当前键中查找匹配项
+        final Match? match = regExp.firstMatch(key);
+
+        // 如果找到匹配项
+        if (match != null) {
+          // 提取行号（第一个捕获组），并减1以适应0基索引
+          final int row = int.parse(match.group(1)!) - 1;
+          // 提取列号（第二个捕获组），并减1以适应0基索引
+          final int column = int.parse(match.group(2)!) - 1;
+
+          // 在对应位置设置单元格的值
+          sheet
+              .cell(
+                CellIndex.indexByColumnRow(columnIndex: column, rowIndex: row),
+              )
+              .value = value
+              .toString();
+        }
+      });
+
+      // 获取"结果"目录，这是保存生成文件的位置
+      final directory = await FileManager().getSectionDirectory('结果');
+      
+      // 处理文件名冲突
+      String finalFileName = fileName;
+      int counter = 2;
+      String filePath = path.join(directory.path, '$finalFileName.xlsx');
+      
+      while (await File(filePath).exists()) {
+        finalFileName = '${fileName}($counter)';
+        filePath = path.join(directory.path, '$finalFileName.xlsx');
+        counter++;
+      }
+
+      // 保存Excel文件为字节数组
+      final fileBytes = excel.save();
+      // 创建File对象用于写入文件
+      final file = File(filePath);
+      // 将字节数组写入文件
+      await file.writeAsBytes(fileBytes!);
+
+      // 返回生成的文件路径
+      return filePath;
+    } catch (e) {
+      // 如果发生任何错误，抛出带有详细信息的异常
+      throw Exception('Failed to generate XLSX file from JSON: $e. Original JSON: $jsonData');
     }
   }
 

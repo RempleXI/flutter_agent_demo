@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../ai_config.dart';
+import '../tools/tool_manager.dart';
 
 /// 工具调用决策服务
 /// 使用副AI模型来判断是否需要调用工具
@@ -40,14 +41,14 @@ ${AiAssistantConfig.secondarySystemPrompt}
         // 如果副AI回答YES，则需要调用工具
         return aiResponse == 'YES';
       } else {
-        // 如果API调用失败，默认回退到简单关键词匹配
-        final docKeywords = ['文件', '文档', 'pdf', 'PDF', 'doc', 'DOC', '处理', '转换', '读取'];
-        return docKeywords.any((keyword) => userMessage.contains(keyword));
+        // 如果API调用失败，默认回退到工具管理器的关键词匹配
+        final toolType = ToolManager.analyzeMessage(userMessage);
+        return toolType != ToolType.none;
       }
     } catch (e) {
-      // 如果出现异常，默认回退到简单关键词匹配
-      final docKeywords = ['文件', '文档', 'pdf', 'PDF', 'doc', 'DOC', '处理', '转换', '读取'];
-      return docKeywords.any((keyword) => userMessage.contains(keyword));
+      // 如果出现异常，默认回退到工具管理器的关键词匹配
+      final toolType = ToolManager.analyzeMessage(userMessage);
+      return toolType != ToolType.none;
     }
   }
 }

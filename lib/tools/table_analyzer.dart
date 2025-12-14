@@ -5,16 +5,17 @@ import '../services/api_service.dart';
 /// 用于分析纯文本格式的Excel数据，识别表头和表格方向
 class TableAnalyzer {
   /// 分析表格文本内容，识别表头和格式方向
-  /// 
+  ///
   /// 参数:
   /// - tableText: 用户提供的纯文本格式的Excel数据
-  /// 
+  ///
   /// 返回:
   /// - 成功时返回包含表头和格式的JSON字符串
   /// - 失败时返回错误信息
   static Future<String> analyzeTableHeaders(String tableText) async {
     // 构造给AI的完整提示词
-    final prompt = '''
+    final prompt =
+        '''
 你是一个数据整理助手。请严格按以下要求处理：
 
 输入：用户提供纯文本格式的Excel数据
@@ -38,7 +39,7 @@ class TableAnalyzer {
 如果两者都符合，选择"horizontal"
 如果无法确定，默认"horizontal"
 
-输出格式：
+输出格式，仅为json格式，不得使用代码块：
 成功识别时：
 {
   "table": {
@@ -58,16 +59,17 @@ $tableText
     try {
       // 调用AI服务分析表格
       final aiResponse = await ApiService.sendMessage(prompt);
-      
+
       if (aiResponse != null) {
         // 尝试解析AI返回的JSON
         try {
           // 验证返回内容是否为有效的JSON
           final decodedJson = json.decode(aiResponse.text);
-          
+
           // 检查是否是有效的表格分析结果
-          if (decodedJson is Map && 
-              (decodedJson.containsKey('table') || decodedJson.containsKey('error'))) {
+          if (decodedJson is Map &&
+              (decodedJson.containsKey('table') ||
+                  decodedJson.containsKey('error'))) {
             return aiResponse.text;
           } else {
             // 如果不是期望的格式，返回错误
@@ -77,7 +79,8 @@ $tableText
           // 如果不是有效JSON，检查是否包含有用信息
           if (aiResponse.text.trim().isEmpty) {
             return '{"error": "AI返回空响应"}';
-          } else if (aiResponse.text.contains("请提供") && aiResponse.text.contains("内容")) {
+          } else if (aiResponse.text.contains("请提供") &&
+              aiResponse.text.contains("内容")) {
             // AI在请求更多内容，这表示分析失败
             return '{"error": "AI返回格式错误: 请提供用户提供的表格文本内容，以便我进行分析和处理。"}';
           } else {

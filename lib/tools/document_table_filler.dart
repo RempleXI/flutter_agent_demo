@@ -251,7 +251,15 @@ class DocumentTableFiller {
     String jsonContent,
   ) async {
     try {
-      final analysisResult = json.decode(jsonContent);
+      // 清理JSON字符串中的控制字符
+      String cleanedJsonContent = jsonContent;
+      // 移除可能的控制字符和多余的空白字符
+      cleanedJsonContent = cleanedJsonContent
+          .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+          
+      final analysisResult = json.decode(cleanedJsonContent);
       if (analysisResult.containsKey('error')) {
         print('表格填充失败: ${analysisResult['error']}');
         return;
@@ -262,13 +270,15 @@ class DocumentTableFiller {
       final fileBaseName = path.basenameWithoutExtension(originalFileName);
       final resultFileName = '${fileBaseName}_filled';
 
-      final filePath = await generator.generateXlsxFromJson(
-        jsonContent,
+      final filePath = await generator.generateXlsxFromJsonWithConflictResolution(
+        cleanedJsonContent,
         resultFileName,
       );
       print('Excel文件已生成: $filePath');
     } catch (e) {
       print('生成XLSX文件时出错: $e');
+      // 提供更详细的错误信息
+      print('原始JSON内容: $jsonContent');
     }
   }
 }

@@ -87,6 +87,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
       String? toolResult;
       String? toolName;
+      bool needRefresh = false;
       if (toolType != ToolType.none) {
         // 添加工具调用提示消息
         setState(() {
@@ -102,15 +103,49 @@ class _MyHomePageState extends State<MyHomePage> {
         // 执行工具调用
         toolResult = await ToolManager.executeTool(toolType, text);
         toolName = ToolResult(toolType: toolType).toolName;
+        
+        // 检查是否需要刷新界面（特别是表格填充工具执行后）
+        if (toolType == ToolType.tableFill || toolType == ToolType.directoryView) {
+          needRefresh = true;
+        }
+        
+        // 将工具执行结果作为系统消息发送给AI（但对于目录查看工具，显示简化的消息）
+        if (toolResult != null) {
+          String displayMessage = toolResult;
+          if (toolType == ToolType.directoryView) {
+            displayMessage = "已完成目录查看";
+          }
+          
+          setState(() {
+            _messages.add(
+              ChatMessage(
+                text: displayMessage,
+                isUser: false,
+                isToolCall: true,
+              ),
+            );
+          });
+        }
       }
 
-      // 移除工具调用逻辑，专注文档处理
-      final aiMessage = await ApiService.sendMessage(text);
+      // 将工具结果加入到AI请求中
+      String finalText = text;
+      if (toolResult != null) {
+        finalText = "工具执行结果 ($toolName):\n$toolResult\n\n用户原始问题: $text";
+      }
+
+      // 获取AI回复
+      final aiMessage = await ApiService.sendMessage(finalText);
 
       if (aiMessage != null) {
         setState(() {
           _messages.add(aiMessage);
         });
+      }
+      
+      // 如果需要刷新界面，则刷新所有区域
+      if (needRefresh) {
+        _refreshAllSections();
       }
     } finally {
       setState(() {

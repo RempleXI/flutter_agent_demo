@@ -76,6 +76,11 @@ class TableFiller {
   }
 }
 
+重要提醒：
+- 所有坐标必须从R1C1开始，不要有任何偏移
+- 不要留空第一行或第一列
+- 确保表头数据从R1C1开始放置
+
 现在开始处理用户请求：
 
 用户提供的纯文本内容：
@@ -86,6 +91,8 @@ ${json.encode(headers)}
 
 用户要求的表格格式：
 $format
+
+请严格按照上述格式返回JSON，不要添加任何解释或其他内容，只返回JSON。
 ''';
 
     try {
@@ -95,13 +102,19 @@ $format
       if (aiResponse != null) {
         // 尝试解析AI返回的JSON
         try {
+          // 清理返回的内容，移除可能的多余字符
+          String cleanedResponse = aiResponse.text
+              .trim()
+              .replaceAll(RegExp(r'^[^{]*'), '') // 移除开头的非JSON内容
+              .replaceAll(RegExp(r'[^}]*$'), ''); // 移除结尾的非JSON内容
+              
           // 验证返回内容是否为有效的JSON
-          final decodedJson = json.decode(aiResponse.text);
+          final decodedJson = json.decode(cleanedResponse);
           
           // 检查是否是有效的表格填充结果
           if (decodedJson is Map && 
               (decodedJson.containsKey('success') || decodedJson.containsKey('error'))) {
-            return aiResponse.text;
+            return cleanedResponse;
           } else {
             // 如果不是期望的格式，返回错误
             return '{"error": "AI返回格式错误: 请提供正确的参数内容，以便我进行处理。"}';
