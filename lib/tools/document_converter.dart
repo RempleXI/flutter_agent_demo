@@ -67,18 +67,6 @@ class DocumentConverter {
     print('正在分析: $fileName');
 
     switch (fileType) {
-      case FileType.text:
-        print('正在预处理文本文件: $fileName');
-        final result = await _preprocessText(fileBytes, fileName);
-        print('预处理结束: $fileName');
-        return result;
-
-      case FileType.markdown:
-        print('正在预处理Markdown文件: $fileName');
-        final result = await _preprocessMarkdown(fileBytes, fileName);
-        print('预处理结束: $fileName');
-        return result;
-
       case FileType.word:
         print('正在预处理Word文档: $fileName');
         final result = await _preprocessWord(fileBytes, fileName);
@@ -103,7 +91,36 @@ class DocumentConverter {
         print('预处理结束: $fileName');
         return result;
 
+      case FileType.text:
+      case FileType.markdown:
+        // 特别处理CSV文件
+        if (fileName.toLowerCase().endsWith('.csv')) {
+          print('正在预处理CSV文件: $fileName');
+          final result = await _preprocessText(fileBytes, fileName);
+          print('预处理结束: $fileName');
+          return result;
+        }
+        if (fileType == FileType.text) {
+          print('正在预处理文本文件: $fileName');
+          final result = await _preprocessText(fileBytes, fileName);
+          print('预处理结束: $fileName');
+          return result;
+        } else {
+          print('正在预处理Markdown文件: $fileName');
+          final result = await _preprocessMarkdown(fileBytes, fileName);
+          print('预处理结束: $fileName');
+          return result;
+        }
+
       case FileType.unknown:
+        // 对于未知类型，尝试按文件扩展名判断
+        final lowerFileName = fileName.toLowerCase();
+        if (lowerFileName.endsWith('.csv')) {
+          print('检测到CSV文件: $fileName');
+          final result = await _preprocessText(fileBytes, fileName);
+          print('预处理结束: $fileName');
+          return result;
+        }
         throw Exception('不支持的文件类型: ${getFileTypeDescription(fileType)}');
     }
   }
@@ -198,17 +215,15 @@ class DocumentConverter {
         // 提取共享字符串表
         final sharedStringsXml = archive.findFile('xl/sharedStrings.xml');
         List<String> sharedStrings = [];
-        String sharedStringsText = '';
         if (sharedStringsXml != null) {
           final xmlContent = utf8.decode(
             sharedStringsXml.content as Uint8List,
             allowMalformed: true,
           );
           sharedStrings = _extractSharedStringsFromXml(xmlContent);
-          sharedStringsText = sharedStrings.join('\n');
         }
 
-        // 获取工作表列表
+        // 获取工作表列表和内容
         final workbookXml = archive.findFile('xl/workbook.xml');
         List<String> sheetNames = [];
         if (workbookXml != null) {
@@ -219,12 +234,53 @@ class DocumentConverter {
           sheetNames = _extractSheetNamesFromXml(xmlContent);
         }
 
+        // 提取所有工作表的文本内容
+        List<String> allTextContent = [];
+        
+        // 提取每个工作表的单元格内容
+        for (final file in archive) {
+          if (file.name.startsWith('xl/worksheets/sheet') &&
+              file.name.endsWith('.xml')) {
+            final xmlContent = utf8.decode(
+              file.content as Uint8List,
+              allowMalformed: true,
+            );
+            // 提取单元格中的文本内容（包括共享字符串引用）
+            final cellTexts = _extractCellTextFromWorksheet(xmlContent, sharedStrings);
+            allTextContent.addAll(cellTexts);
+            
+            // 同时使用备选方法提取所有文本内容
+            final allTexts = _extractAllTextFromXml(xmlContent);
+            allTextContent.addAll(allTexts);
+          }
+        }
+
+        // 去重并保留顺序
+        final uniqueTexts = <String>[];
+        final seen = <String>{};
+        for (final text in allTextContent) {
+          if (!seen.contains(text)) {
+            uniqueTexts.add(text);
+            seen.add(text);
+          }
+        }
+        allTextContent = uniqueTexts;
+
+        print('通过所有方法提取的文本数量: ${allTextContent.length}');
+        print('提取的文本内容: ${allTextContent.take(20).join(", ")}${allTextContent.length > 20 ? "..." : ""}');
+
+        // 尝试构建CSV格式的内容
+        String csvContent = _buildCsvFromExcelContent(archive, sharedStrings);
+        
+        final fullTextContent = allTextContent.join('\n').trim();
+        print('最终合并后的文本内容长度: ${fullTextContent.length}');
+
         // 提取内部文本内容预览
-        String textPreview = sharedStringsText;
-        if (sharedStringsText.length > 2000) {
+        String textPreview = fullTextContent;
+        if (fullTextContent.length > 2000) {
           textPreview =
-              '${sharedStringsText.substring(0, 2000)}'
-              '\n\n... (content truncated, total ${sharedStringsText.length} characters)';
+              '${fullTextContent.substring(0, 2000)}'
+              '\n\n... (content truncated, total ${fullTextContent.length} characters)';
         }
 
         return {
@@ -232,7 +288,7 @@ class DocumentConverter {
           'format': 'xlsx',
           'fileName': fileName,
           'fileSize': fileBytes.length,
-          'textContent': sharedStringsText,
+          'textContent': csvContent.isNotEmpty ? csvContent : fullTextContent,
           'textContentPreview': textPreview,
           'sheetCount': sheetNames.length,
           'sheetNames': sheetNames,
@@ -261,6 +317,128 @@ class DocumentConverter {
         'error': '解析过程中发生错误: $e',
       };
     }
+  }
+
+  /// 从工作表XML中提取单元格文本
+  static List<String> _extractCellTextFromWorksheet(String xmlContent, List<String> sharedStrings) {
+    final cellTexts = <String>[];
+    
+    // 匹配单元格元素 <c>...</c>
+    final cellMatches = RegExp(
+      r'<c[^>]*>(.*?)</c>',
+      dotAll: true,
+    ).allMatches(xmlContent);
+    
+    for (final cellMatch in cellMatches) {
+      final cellContent = cellMatch.group(1) ?? '';
+      
+      // 查找直接文本 <t>...</t>
+      final directTextMatches = RegExp(r'<t[^>]*>(.*?)</t>', dotAll: true).allMatches(cellContent);
+      for (final textMatch in directTextMatches) {
+        String text = textMatch.group(1) ?? '';
+        // 处理转义字符
+        text = text.replaceAll('&lt;', '<');
+        text = text.replaceAll('&gt;', '>');
+        text = text.replaceAll('&amp;', '&');
+        text = text.replaceAll('&quot;', '"');
+        text = text.replaceAll('&#39;', "'");
+        if (text.trim().isNotEmpty) {
+          cellTexts.add(text.trim());
+        }
+      }
+      
+      // 如果没有直接文本，查找数值引用 <v>...</v>
+      if (directTextMatches.isEmpty) {
+        final valueMatches = RegExp(r'<v[^>]*>(.*?)</v>', dotAll: true).allMatches(cellContent);
+        for (final valueMatch in valueMatches) {
+          String value = valueMatch.group(1) ?? '';
+          if (value.trim().isNotEmpty) {
+            // 尝试将值解析为整数，作为共享字符串的索引
+            try {
+              final index = int.parse(value.trim());
+              if (index >= 0 && index < sharedStrings.length && sharedStrings[index].isNotEmpty) {
+                // 使用共享字符串
+                cellTexts.add(sharedStrings[index]);
+              } else {
+                // 如果索引无效或对应字符串为空，则直接使用值
+                // 但要过滤掉纯数字索引
+                if (!RegExp(r'^\d+$').hasMatch(value.trim())) {
+                  cellTexts.add(value.trim());
+                }
+              }
+            } catch (e) {
+              // 如果不是数字，直接使用值
+              cellTexts.add(value.trim());
+            }
+          }
+        }
+      }
+    }
+    
+    return cellTexts;
+  }
+
+  /// 从XML中提取所有文本内容
+  static List<String> _extractAllTextFromXml(String xmlContent) {
+    final texts = <String>[];
+    
+    // 移除XML声明和注释
+    String content = xmlContent;
+    content = content.replaceAll(RegExp(r'<\?xml[^>]*>', dotAll: true), '');
+    content = content.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
+    
+    // 提取所有<t>标签中的文本内容（这是Excel中最常见的文本存储方式）
+    final tTagMatches = RegExp(r'<t[^>]*>(.*?)</t>', dotAll: true).allMatches(content);
+    for (final match in tTagMatches) {
+      String text = match.group(1) ?? '';
+      // 处理转义字符
+      text = text.replaceAll('&lt;', '<');
+      text = text.replaceAll('&gt;', '>');
+      text = text.replaceAll('&amp;', '&');
+      text = text.replaceAll('&quot;', '"');
+      text = text.replaceAll('&#39;', "'");
+      // 清理空白字符
+      text = text.trim();
+      if (text.isNotEmpty) {
+        texts.add(text);
+      }
+    }
+    
+    // 提取is标签中的文本内容（另一种可能的文本存储方式）
+    final isTagMatches = RegExp(r'<is><t[^>]*>(.*?)</t></is>', dotAll: true).allMatches(content);
+    for (final match in isTagMatches) {
+      String text = match.group(1) ?? '';
+      // 处理转义字符
+      text = text.replaceAll('&lt;', '<');
+      text = text.replaceAll('&gt;', '>');
+      text = text.replaceAll('&amp;', '&');
+      text = text.replaceAll('&quot;', '"');
+      text = text.replaceAll('&#39;', "'");
+      // 清理空白字符
+      text = text.trim();
+      if (text.isNotEmpty) {
+        texts.add(text);
+      }
+    }
+    
+    // 如果没有找到<t>标签内容，尝试提取所有标签内的文本内容
+    if (texts.isEmpty) {
+      final textMatches = RegExp(r'>[^<]+<', dotAll: true).allMatches(content);
+      for (final match in textMatches) {
+        String text = match.group(0) ?? '';
+        // 移除开头的>和结尾的<
+        text = text.substring(1, text.length - 1);
+        // 清理空白字符
+        text = text.trim();
+        // 过滤掉纯数字和非常短的字符串（可能是索引）
+        if (text.isNotEmpty && 
+            (text.length > 1 || !RegExp(r'^\d+$').hasMatch(text))) {
+          texts.add(text);
+        }
+      }
+    }
+    
+    return texts;
   }
 
   /// 预处理PowerPoint文档
@@ -460,7 +638,7 @@ class DocumentConverter {
     }
   }
 
-  /// 预处理文本文件
+  /// 预处理文本文件（包括CSV文件）
   static Future<Map<String, dynamic>> _preprocessText(
     Uint8List fileBytes,
     String fileName,
@@ -474,6 +652,12 @@ class DocumentConverter {
         content = content.substring(1);
       }
 
+      // 对于CSV文件，保留全部内容
+      if (fileName.toLowerCase().endsWith('.csv')) {
+        // CSV文件不需要特殊处理，保留全部内容即可
+        // 可以在这里添加特殊的CSV处理逻辑（如格式化等），但目前只需保留原始内容
+      }
+
       // 截断过长的内容
       String truncatedContent = content;
       if (content.length > 10000) {
@@ -484,10 +668,10 @@ class DocumentConverter {
 
       return {
         'type': 'text',
-        'format': 'txt',
+        'format': fileName.toLowerCase().endsWith('.csv') ? 'csv' : 'txt',
         'fileName': fileName,
         'fileSize': fileBytes.length,
-        'textContent': content,
+        'textContent': content,  // 全部内容作为文本内容
         'textContentPreview': truncatedContent,
         'lineCount': content.split('\n').length,
         'wordCount': content
@@ -607,13 +791,38 @@ class DocumentConverter {
   /// 从共享字符串XML中提取字符串列表
   static List<String> _extractSharedStringsFromXml(String xmlContent) {
     final strings = <String>[];
-    final matches = RegExp(
-      r'<si><t(?:[^>]*)>(.*?)</t></si>',
+    
+    // 查找所有共享字符串项 <si>...</si>
+    final siMatches = RegExp(
+      r'<si>(.*?)</si>',
       dotAll: true,
     ).allMatches(xmlContent);
 
-    for (final match in matches) {
-      strings.add(match.group(1) ?? '');
+    for (final siMatch in siMatches) {
+      final siContent = siMatch.group(1) ?? '';
+      
+      // 查找 <t> 标签中的文本
+      final tMatch = RegExp(r'<t[^>]*>(.*?)</t>', dotAll: true).firstMatch(siContent);
+      if (tMatch != null) {
+        String text = tMatch.group(1) ?? '';
+        // 处理转义字符
+        text = text.replaceAll('&lt;', '<');
+        text = text.replaceAll('&gt;', '>');
+        text = text.replaceAll('&amp;', '&');
+        text = text.replaceAll('&quot;', '"');
+        text = text.replaceAll('&#39;', "'");
+        strings.add(text);
+      } else {
+        // 如果没有 <t> 标签，可能是复杂的富文本格式
+        // 尝试提取所有文本内容
+        final textNodes = RegExp(r'>([^<]+)<', dotAll: true).allMatches(siContent);
+        final richText = textNodes.map((match) => match.group(1) ?? '').join('').trim();
+        if (richText.isNotEmpty) {
+          strings.add(richText);
+        } else {
+          strings.add('');
+        }
+      }
     }
 
     return strings;
@@ -629,6 +838,132 @@ class DocumentConverter {
     }
 
     return sheetNames;
+  }
+
+  /// 将Excel内容转换为CSV格式
+  static String _buildCsvFromExcelContent(Archive archive, List<String> sharedStrings) {
+    try {
+      // 遍历所有工作表
+      for (final file in archive) {
+        if (file.name.startsWith('xl/worksheets/sheet') &&
+            file.name.endsWith('.xml')) {
+          
+          final xmlContent = utf8.decode(
+            file.content as Uint8List,
+            allowMalformed: true,
+          );
+          
+          // 解析工作表数据并转换为CSV
+          return _parseWorksheetToCsv(xmlContent, sharedStrings);
+        }
+      }
+    } catch (e) {
+      print('构建CSV内容时出错: $e');
+    }
+    
+    return '';
+  }
+
+  /// 解析工作表XML并转换为CSV格式
+  static String _parseWorksheetToCsv(String xmlContent, List<String> sharedStrings) {
+    try {
+      final rows = <List<String>>[];
+      
+      // 查找所有的行 <row>...</row>
+      final rowMatches = RegExp(
+        r'<row[^>]*>(.*?)</row>',
+        dotAll: true,
+      ).allMatches(xmlContent);
+      
+      for (final rowMatch in rowMatches) {
+        final rowContent = rowMatch.group(1) ?? '';
+        final cells = <String>[];
+        
+        // 查找行内的所有单元格 <c>...</c>
+        // 注意：单元格可能有引用属性，如 r="A1" t="s" 等
+        final cellMatches = RegExp(
+          r'<c[^>]*>(.*?)</c>',
+          dotAll: true,
+        ).allMatches(rowContent);
+        
+        for (final cellMatch in cellMatches) {
+          final cellContent = cellMatch.group(1) ?? '';
+          
+          // 查找直接文本 <t>...</t>
+          final tMatch = RegExp(r'<t[^>]*>(.*?)</t>', dotAll: true).firstMatch(cellContent);
+          if (tMatch != null) {
+            String text = tMatch.group(1) ?? '';
+            // 处理转义字符
+            text = text.replaceAll('&lt;', '<');
+            text = text.replaceAll('&gt;', '>');
+            text = text.replaceAll('&amp;', '&');
+            text = text.replaceAll('&quot;', '"');
+            text = text.replaceAll('&#39;', "'");
+            cells.add(text.trim());
+            continue;
+          }
+          
+          // 查找内联字符串 <is><t>...</t></is>
+          final isMatch = RegExp(r'<is><t[^>]*>(.*?)</t></is>', dotAll: true).firstMatch(cellContent);
+          if (isMatch != null) {
+            String text = isMatch.group(1) ?? '';
+            // 处理转义字符
+            text = text.replaceAll('&lt;', '<');
+            text = text.replaceAll('&gt;', '>');
+            text = text.replaceAll('&amp;', '&');
+            text = text.replaceAll('&quot;', '"');
+            text = text.replaceAll('&#39;', "'");
+            cells.add(text.trim());
+            continue;
+          }
+          
+          // 查找数值引用 <v>...</v>
+          final vMatch = RegExp(r'<v[^>]*>(.*?)</v>', dotAll: true).firstMatch(cellContent);
+          if (vMatch != null) {
+            String value = vMatch.group(1) ?? '';
+            try {
+              final index = int.parse(value.trim());
+              if (index >= 0 && index < sharedStrings.length) {
+                cells.add(sharedStrings[index]);
+              } else {
+                // 检查单元格是否有类型属性 t="s" 表示共享字符串
+                // 如果是共享字符串但索引无效，则添加空字符串
+                // 否则添加数值本身
+                cells.add(value.trim());
+              }
+            } catch (e) {
+              cells.add(value.trim());
+            }
+            continue;
+          }
+          
+          // 如果都没有找到，添加空字符串
+          cells.add('');
+        }
+        
+        if (cells.isNotEmpty) {
+          rows.add(cells);
+        }
+      }
+      
+      // 将行数据转换为CSV格式
+      final csvLines = <String>[];
+      for (final row in rows) {
+        final csvCells = row.map((cell) {
+          // 如果单元格包含逗号、换行符或双引号，则需要用双引号包围并转义双引号
+          if (cell.contains(',') || cell.contains('\n') || cell.contains('"')) {
+            return '"${cell.replaceAll('"', '""')}"';
+          }
+          return cell;
+        }).join(',');
+        csvLines.add(csvCells);
+      }
+      
+      return csvLines.join('\n');
+    } catch (e) {
+      print('解析工作表为CSV时出错: $e');
+      return '';
+    }
   }
 
   /// 保存预处理结果到文件（在Web平台上不可用）

@@ -1,32 +1,38 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
+import '../services/file_manager.dart';
 
 /// 目录查看工具类
-/// 提供查看写入区和结果区目录的功能
+/// 提供查看各个数据区域目录的功能
 class DirectoryViewer {
-  /// 写入区目录路径
-  static const String _writeDirPath = 'data/wait';
-  
-  /// 结果区目录路径
-  static const String _resultDirPath = 'data/result';
+  /// 查看等待区目录
+  /// 返回等待区目录中的所有文件和子目录列表
+  static Future<List<String>> viewWaitDirectory() async {
+    return _listDirectory(await FileManager().getSectionDirectory('等待'));
+  }
 
-  /// 查看写入区目录
-  /// 返回写入区目录中的所有文件和子目录列表
-  static List<String> viewWriteDirectory() {
-    return _listDirectory(_writeDirPath);
+  /// 查看读取区目录
+  /// 返回读取区目录中的所有文件和子目录列表
+  static Future<List<String>> viewReadDirectory() async {
+    return _listDirectory(await FileManager().getSectionDirectory('读取'));
+  }
+
+  /// 查看模板区目录
+  /// 返回模板区目录中的所有文件和子目录列表
+  static Future<List<String>> viewTemplateDirectory() async {
+    return _listDirectory(await FileManager().getSectionDirectory('模板'));
   }
 
   /// 查看结果区目录
   /// 返回结果区目录中的所有文件和子目录列表
-  static List<String> viewResultDirectory() {
-    return _listDirectory(_resultDirPath);
+  static Future<List<String>> viewResultDirectory() async {
+    return _listDirectory(await FileManager().getSectionDirectory('结果'));
   }
 
   /// 列出指定目录中的所有文件和子目录
-  static List<String> _listDirectory(String dirPath) {
-    final dir = Directory(dirPath);
-    if (!dir.existsSync()) {
-      return ['目录不存在: $dirPath'];
+  static Future<List<String>> _listDirectory(Directory dir) async {
+    if (!await dir.exists()) {
+      return ['目录不存在: ${dir.path}'];
     }
 
     try {

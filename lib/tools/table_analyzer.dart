@@ -1,8 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../config.dart';
-import '../ai_config.dart';
-import '../models/chat_message.dart';
+import '../services/api_service.dart';
 
 /// 表格分析工具类
 /// 用于分析纯文本格式的Excel数据，识别表头和表格方向
@@ -16,7 +13,7 @@ class TableAnalyzer {
   /// - 成功时返回包含表头和格式的JSON字符串
   /// - 失败时返回错误信息
   static Future<String> analyzeTableHeaders(String tableText) async {
-    // 构造给副AI的完整提示词
+    // 构造给AI的完整提示词
     final prompt = '''
 你是一个数据整理助手。请严格按以下要求处理：
 
@@ -59,55 +56,40 @@ $tableText
 ''';
 
     try {
-      // 调用副AI服务分析表格
-      final aiResponse = await _sendToSecondaryAI(prompt);
+      // 调用AI服务分析表格
+      final aiResponse = await ApiService.sendMessage(prompt);
       
       if (aiResponse != null) {
         // 尝试解析AI返回的JSON
         try {
           // 验证返回内容是否为有效的JSON
-          json.decode(aiResponse);
-          return aiResponse;
+          final decodedJson = json.decode(aiResponse.text);
+          
+          // 检查是否是有效的表格分析结果
+          if (decodedJson is Map && 
+              (decodedJson.containsKey('table') || decodedJson.containsKey('error'))) {
+            return aiResponse.text;
+          } else {
+            // 如果不是期望的格式，返回错误
+            return '{"error": "AI返回格式错误: 请提供用户提供的表格文本内容，以便我进行分析和处理。"}';
+          }
         } catch (e) {
-          // 如果不是有效JSON，返回错误
-          return '{"error": "AI返回格式错误: $aiResponse"}';
+          // 如果不是有效JSON，检查是否包含有用信息
+          if (aiResponse.text.trim().isEmpty) {
+            return '{"error": "AI返回空响应"}';
+          } else if (aiResponse.text.contains("请提供") && aiResponse.text.contains("内容")) {
+            // AI在请求更多内容，这表示分析失败
+            return '{"error": "AI返回格式错误: 请提供用户提供的表格文本内容，以便我进行分析和处理。"}';
+          } else {
+            // 尝试包装成错误信息
+            return '{"error": "AI返回格式错误: ${aiResponse.text.replaceAll('"', '')}"}';
+          }
         }
       } else {
         return '{"error": "AI服务调用失败"}';
       }
     } catch (e) {
-      return '{"error": "分析过程中发生错误: $e"}';
-    }
-  }
-
-  /// 发送消息到副AI API（用于工具调用决策和特定任务处理）
-  static Future<String?> _sendToSecondaryAI(String text) async {
-    try {
-      // 使用硅基流动(SiliconFlow)的副AI API
-      final response = await http.post(
-        Uri.parse(ApiConfig.siliconFlowBaseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${ApiConfig.siliconFlowApiKey}',
-        },
-        body: jsonEncode({
-          'model': ApiConfig.secondaryModelName,  // 使用副AI模型
-          'messages': [
-            {'role': 'user', 'content': text},
-          ],
-          'stream': false,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final aiResponse = data['choices'][0]['message']['content'];
-        return aiResponse;
-      } else {
-        return null;
-      }
-    } catch (e) {
-      return null;
+      return '{"error": "分析过程中发生错误: ${e.toString()}"}';
     }
   }
 }
