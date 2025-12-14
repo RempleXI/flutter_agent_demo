@@ -4,10 +4,13 @@ import 'models/chat_message.dart';
 import 'services/api_service.dart';
 import 'widgets/file_section.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'tools/tool_manager.dart';
+import 'ai_config.dart';
+import 'services/tool_decision_service.dart';
 
 void main() {
   runApp(const MyApp());
-  
+
   // 设置窗口属性
   doWhenWindowReady(() {
     final win = appWindow;
@@ -53,7 +56,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _textFieldFocusNode = FocusNode();
   bool _isLoading = false;
-  
+
   // 为每个区域创建 GlobalKey
   final GlobalKey<FileSectionState> _waitingSectionKey = GlobalKey();
   final GlobalKey<FileSectionState> _readSectionKey = GlobalKey();
@@ -74,7 +77,36 @@ class _MyHomePageState extends State<MyHomePage> {
     _scrollToBottom();
 
     try {
+      // 使用双AI机制判断是否需要调用工具
+      final shouldCallTool = await ToolDecisionService.shouldCallTool(text);
+
+      ToolType toolType = ToolManager.analyzeMessage(text);
+      if (shouldCallTool && toolType == ToolType.none) {
+        toolType = ToolType.document;
+      }
+
+      String? toolResult;
+      String? toolName;
+      if (toolType != ToolType.none) {
+        // 添加工具调用提示消息
+        setState(() {
+          _messages.add(
+            ChatMessage(
+              text: '正在调用"${ToolResult(toolType: toolType).toolName}"工具...',
+              isUser: false,
+              isToolCall: true,
+            ),
+          );
+        });
+
+        // 执行工具调用
+        toolResult = await ToolManager.executeTool(toolType, text);
+        toolName = ToolResult(toolType: toolType).toolName;
+      }
+
+      // 移除工具调用逻辑，专注文档处理
       final aiMessage = await ApiService.sendMessage(text);
+
       if (aiMessage != null) {
         setState(() {
           _messages.add(aiMessage);
@@ -106,7 +138,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _refreshAllSections() {
     // 调用每个区域的刷新方法
-    [_waitingSectionKey, _readSectionKey, _templateSectionKey, _resultSectionKey]
+    [
+          _waitingSectionKey,
+          _readSectionKey,
+          _templateSectionKey,
+          _resultSectionKey,
+        ]
         .map((key) => key.currentState)
         .whereType<FileSectionState>()
         .forEach((state) => state.refreshFiles());
@@ -132,15 +169,9 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Row(
           children: [
             // 左侧四个区域 - 分为上下两排，每排两个区域
-            Expanded(
-              flex: 1,
-              child: _buildLeftPanel(),
-            ),
+            Expanded(flex: 1, child: _buildLeftPanel()),
             // 右侧聊天区域
-            Expanded(
-              flex: 1,
-              child: _buildChatPanel(),
-            ),
+            Expanded(flex: 1, child: _buildChatPanel()),
           ],
         ),
       ),

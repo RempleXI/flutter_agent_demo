@@ -12,11 +12,53 @@ class ChatMessageItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.isUser) {
+    if (message.isToolCall) {
+      return _buildToolCallMessage();
+    } else if (message.isUser) {
       return _buildUserMessage();
     } else {
       return _buildAIMessage(context);
     }
+  }
+
+  Widget _buildToolCallMessage() {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            decoration: BoxDecoration(
+              color: Colors.orange[100],
+              borderRadius: BorderRadius.circular(12.0),
+              border: Border.all(
+                color: Colors.orangeAccent,
+                width: 1.0,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  size: 16.0,
+                  color: Colors.orange,
+                ),
+                const SizedBox(width: 4.0),
+                Text(
+                  message.text,
+                  style: const TextStyle(
+                    fontSize: 14.0,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildUserMessage() {

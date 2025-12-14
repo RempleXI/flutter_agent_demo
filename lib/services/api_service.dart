@@ -1,12 +1,16 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config.dart';
+import '../ai_config.dart';
 import '../models/chat_message.dart';
 
 class ApiService {
   // 发送消息到AI API
   static Future<ChatMessage?> sendMessage(String text) async {
     try {
+      // 构建包含系统提示的完整消息
+      final fullPrompt = '${AiAssistantConfig.systemPrompt}\n\n用户问题: $text';
+      
       // 使用硅基流动(SiliconFlow)的DeepSeek API
       final response = await http.post(
         Uri.parse(ApiConfig.siliconFlowBaseUrl),
@@ -15,9 +19,9 @@ class ApiService {
           'Authorization': 'Bearer ${ApiConfig.siliconFlowApiKey}',
         },
         body: jsonEncode({
-          'model': ApiConfig.modelName,
+          'model': ApiConfig.primaryModelName,
           'messages': [
-            {'role': 'user', 'content': text},
+            {'role': 'user', 'content': fullPrompt},
           ],
           'stream': false,
         }),
