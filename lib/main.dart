@@ -4,9 +4,8 @@ import 'models/chat_message.dart';
 import 'services/api_service.dart';
 import 'widgets/file_section.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
-import 'tools/tool_manager.dart';
-import 'ai_config.dart';
 import 'services/tool_decision_service.dart';
+import 'ai_config.dart';
 
 void main() {
   runApp(const MyApp());
@@ -78,22 +77,20 @@ class _MyHomePageState extends State<MyHomePage> {
 
     try {
       // 使用双AI机制判断是否需要调用工具
-      final shouldCallTool = await ToolDecisionService.shouldCallTool(text);
-
-      ToolType toolType = ToolManager.analyzeMessage(text);
-      if (shouldCallTool && toolType == ToolType.none) {
-        toolType = ToolType.document;
-      }
+      print('开始工具决策过程');
+      final toolInfo = await ToolDecisionService.shouldCallTool(text);
+      print('工具决策结果: 类别=${toolInfo.category}, 具体工具=${toolInfo.specificTool}');
 
       String? toolResult;
       String? toolName;
       bool needRefresh = false;
-      if (toolType != ToolType.none) {
-        // 添加工具调用提示消息
+      if (toolInfo.category != ToolCategory.none) {
+        print('检测到需要调用工具: ${toolInfo.displayName}');
+        // 添加工具调用提示消息（显示通用类别名称）
         setState(() {
           _messages.add(
             ChatMessage(
-              text: '正在调用"${ToolResult(toolType: toolType).toolName}"工具...',
+              text: '正在调用${toolInfo.displayName}工具',
               isUser: false,
               isToolCall: true,
             ),
@@ -101,21 +98,21 @@ class _MyHomePageState extends State<MyHomePage> {
         });
 
         // 执行工具调用
-        toolResult = await ToolManager.executeTool(toolType, text);
-        toolName = ToolResult(toolType: toolType).toolName;
-        
-        // 检查是否需要刷新界面（特别是表格填充工具执行后）
-        if (toolType == ToolType.tableFill || toolType == ToolType.directoryView) {
+        print('开始执行工具: ${toolInfo.specificToolName}');
+        toolResult = await ToolDecisionService.executeTool(toolInfo, text);
+        toolName = toolInfo.displayName;
+        print('工具执行结果: $toolResult');
+
+        // 检查是否需要刷新界面
+        if (toolInfo.specificTool == SpecificTool.tableFill ||
+            toolInfo.specificTool == SpecificTool.directoryView) {
           needRefresh = true;
         }
-        
-        // 将工具执行结果作为系统消息发送给AI（但对于目录查看工具，显示简化的消息）
+
+        // 工具执行完成提示消息（显示具体工具名称）
         if (toolResult != null) {
-          String displayMessage = toolResult;
-          if (toolType == ToolType.directoryView) {
-            displayMessage = "已完成目录查看";
-          }
-          
+          String displayMessage = '已执行${toolInfo.specificToolName}操作';
+
           setState(() {
             _messages.add(
               ChatMessage(
@@ -126,6 +123,8 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           });
         }
+      } else {
+        print('未检测到需要调用的工具');
       }
 
       // 将工具结果加入到AI请求中
@@ -135,19 +134,30 @@ class _MyHomePageState extends State<MyHomePage> {
       }
 
       // 获取AI回复
+      print('开始获取AI回复');
       final aiMessage = await ApiService.sendMessage(finalText);
+      print('AI回复获取完成');
 
       if (aiMessage != null) {
         setState(() {
           _messages.add(aiMessage);
         });
       }
-      
+
       // 如果需要刷新界面，则刷新所有区域
       if (needRefresh) {
+        print('刷新文件区域界面');
         _refreshAllSections();
       }
+    } catch (e, stackTrace) {
+      print('处理消息时发生错误: $e');
+      print('错误堆栈: $stackTrace');
+      // 添加错误消息到聊天界面
+      setState(() {
+        _messages.add(ChatMessage(text: '处理您的请求时发生了错误，请稍后重试。', isUser: false));
+      });
     } finally {
+      print('设置加载状态为false');
       setState(() {
         _isLoading = false;
       });

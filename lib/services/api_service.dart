@@ -7,6 +7,11 @@ import '../models/chat_message.dart';
 class ApiService {
   // 发送消息到AI API
   static Future<ChatMessage?> sendMessage(String text) async {
+    return await _sendMessageWithModel(text, ApiConfig.chatModelName);
+  }
+  
+  // 发送消息到指定模型的AI API
+  static Future<ChatMessage?> _sendMessageWithModel(String text, String modelName) async {
     try {
       // 构建包含系统提示的完整消息
       final fullPrompt = '${AiAssistantConfig.systemPrompt}\n\n用户问题: $text';
@@ -19,7 +24,7 @@ class ApiService {
           'Authorization': 'Bearer ${ApiConfig.siliconFlowApiKey}',
         },
         body: jsonEncode({
-          'model': ApiConfig.primaryModelName,
+          'model': modelName,
           'messages': [
             {'role': 'user', 'content': fullPrompt},
           ],
@@ -40,5 +45,10 @@ class ApiService {
     } catch (e) {
       return ChatMessage(text: '抱歉，发生错误: $e', isUser: false);
     }
+  }
+  
+  // 发送消息到分析AI API（用于字段提取等分析任务）
+  static Future<ChatMessage?> sendAnalysisRequest(String text) async {
+    return await _sendMessageWithModel(text, ApiConfig.analysisModelName);
   }
 }

@@ -58,7 +58,7 @@ $tableText
 
     try {
       // 调用AI服务分析表格
-      final aiResponse = await ApiService.sendMessage(prompt);
+      final aiResponse = await ApiService.sendAnalysisRequest(prompt);
 
       if (aiResponse != null) {
         // 尝试解析AI返回的JSON
