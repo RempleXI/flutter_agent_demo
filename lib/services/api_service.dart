@@ -49,6 +49,36 @@ class ApiService {
   
   // 发送消息到分析AI API（用于字段提取等分析任务）
   static Future<ChatMessage?> sendAnalysisRequest(String text) async {
-    return await _sendMessageWithModel(text, ApiConfig.analysisModelName);
+    // 修改此处：每次调用都创建新的独立对话
+    try {
+      // 使用硅基流动(SiliconFlow)的DeepSeek API
+      final response = await http.post(
+        Uri.parse(ApiConfig.siliconFlowBaseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${ApiConfig.siliconFlowApiKey}',
+        },
+        body: jsonEncode({
+          'model': ApiConfig.analysisModelName,
+          'messages': [
+            {'role': 'user', 'content': text},
+          ],
+          'stream': false,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final aiResponse = data['choices'][0]['message']['content'];
+        return ChatMessage(text: aiResponse, isUser: false);
+      } else {
+        return ChatMessage(
+          text: 'API请求失败，状态码: ${response.statusCode}',
+          isUser: false,
+        );
+      }
+    } catch (e) {
+      return ChatMessage(text: '抱歉，发生错误: $e', isUser: false);
+    }
   }
 }
