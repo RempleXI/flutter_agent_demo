@@ -9,13 +9,16 @@ class ApiService {
   static Future<ChatMessage?> sendMessage(String text) async {
     return await _sendMessageWithModel(text, ApiConfig.chatModelName);
   }
-  
+
   // 发送消息到指定模型的AI API
-  static Future<ChatMessage?> _sendMessageWithModel(String text, String modelName) async {
+  static Future<ChatMessage?> _sendMessageWithModel(
+    String text,
+    String modelName,
+  ) async {
     try {
       // 构建包含系统提示的完整消息
       final fullPrompt = '${AiAssistantConfig.systemPrompt}\n\n用户问题: $text';
-      
+
       // 使用硅基流动(SiliconFlow)的DeepSeek API
       final response = await http.post(
         Uri.parse(ApiConfig.siliconFlowBaseUrl),
@@ -46,10 +49,10 @@ class ApiService {
       return ChatMessage(text: '抱歉，发生错误: $e', isUser: false);
     }
   }
-  
+
   // 发送消息到分析AI API（用于字段提取等分析任务）
   static Future<ChatMessage?> sendAnalysisRequest(String text) async {
-    // 修改此处：每次调用都创建新的独立对话
+    // 每次调用都创建新的独立对话
     try {
       // 使用硅基流动(SiliconFlow)的DeepSeek API
       final response = await http.post(
