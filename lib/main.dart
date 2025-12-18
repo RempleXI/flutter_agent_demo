@@ -5,9 +5,9 @@ import 'services/api_service.dart';
 import 'widgets/file_section.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'services/tool_decision_service.dart';
-import 'ai_config.dart';
 import 'services/config_service.dart';
 import 'widgets/config_dialog.dart';
+import 'widgets/tooltip_overlay.dart';
 
 void main() {
   runApp(const MyApp());
@@ -19,7 +19,7 @@ void main() {
     win.minSize = initialSize;
     win.size = initialSize;
     win.alignment = Alignment.center;
-    win.title = "AI Chat Demo";
+    win.title = "AI智能文档助手";
     win.show();
   });
 }
@@ -30,14 +30,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AI Chat Demo',
+      title: 'AI智能文档助手',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         // 使用等线字体
         fontFamily: '等线',
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'AI Chat Interface'),
+      home: const MyHomePage(title: 'AI Document Assistant'),
     );
   }
 }
@@ -57,6 +57,9 @@ class _MyHomePageState extends State<MyHomePage> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _textFieldFocusNode = FocusNode();
   bool _isLoading = false;
+  
+  // 防止重复提交配置的标志位
+  bool _isConfiguring = false;
 
   // 为每个区域创建 GlobalKey
   final GlobalKey<FileSectionState> _waitingSectionKey = GlobalKey();
@@ -84,6 +87,13 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _showConfigDialog() async {
+    // 防止重复点击
+    if (_isConfiguring) return;
+    
+    setState(() {
+      _isConfiguring = true;
+    });
+    
     final result = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -91,11 +101,10 @@ class _MyHomePageState extends State<MyHomePage> {
       },
     );
 
-    if (result == true && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('配置已保存')));
-    }
+    // 重置配置状态
+    setState(() {
+      _isConfiguring = false;
+    });
   }
 
   // 发送消息
@@ -258,37 +267,40 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshAllSections,
-            tooltip: '刷新',
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _resetChat,
-            tooltip: '新对话',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _showConfigDialog,
-            tooltip: '配置',
-          ),
-        ],
-      ),
-      body: Container(
-        constraints: const BoxConstraints(minWidth: 1024, minHeight: 768),
-        child: Row(
-          children: [
-            // 左侧四个区域 - 分为上下两排，每排两个区域
-            Expanded(flex: 1, child: _buildLeftPanel()),
-            // 右侧聊天区域
-            Expanded(flex: 1, child: _buildChatPanel()),
+    return TooltipOverlay(
+      // 使用TooltipOverlay包装整个界面
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: Text(widget.title),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshAllSections,
+              tooltip: '刷新',
+            ),
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _resetChat,
+              tooltip: '新对话',
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: _showConfigDialog,
+              tooltip: '配置',
+            ),
           ],
+        ),
+        body: Container(
+          constraints: const BoxConstraints(minWidth: 1024, minHeight: 768),
+          child: Row(
+            children: [
+              // 左侧四个区域 - 分为上下两排，每排两个区域
+              Expanded(flex: 1, child: _buildLeftPanel()),
+              // 右侧聊天区域
+              Expanded(flex: 1, child: _buildChatPanel()),
+            ],
+          ),
         ),
       ),
     );

@@ -66,8 +66,11 @@ class ApiService {
     final messages = <Map<String, String>>[];
 
     // 添加系统提示
-    messages.add({'role': 'system', 'content': AiPromptConfig.systemPrompt});
-
+    messages.add({
+      'role': 'system',
+      'content': AiPromptConfig.systemPrompt,
+    });
+    
     // 添加历史消息
     for (final msg in history) {
       // 跳过工具调用消息，因为它们不应该出现在AI的对话历史中

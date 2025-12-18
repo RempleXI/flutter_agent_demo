@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/config_service.dart';
+import 'tooltip_overlay.dart';
 
 class ConfigDialog extends StatefulWidget {
   const ConfigDialog({super.key});
@@ -15,6 +16,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
   late TextEditingController _chatModelController;
   late TextEditingController _decisionModelController;
   late TextEditingController _analysisModelController;
+  
+  // 防止重复提交的标志位
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -55,7 +59,14 @@ class _ConfigDialogState extends State<ConfigDialog> {
   }
 
   Future<void> _saveConfig() async {
+    // 防止重复提交
+    if (_isSaving) return;
+    
     if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isSaving = true;
+      });
+      
       final configService = ExternalConfigService();
       await configService.updateConfig({
         'siliconFlowApiKey': _apiKeyController.text,
@@ -67,9 +78,20 @@ class _ConfigDialogState extends State<ConfigDialog> {
 
       if (mounted) {
         Navigator.of(context).pop(true); // 返回true表示配置已保存
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('配置已保存')),
-        );
+        // 显示配置保存成功提示
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          TooltipUtil.showTooltip(
+            '配置已保存',
+            TooltipPosition.windowCenter,
+          );
+        });
+      }
+      
+      // 保存完成后重置状态
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
       }
     }
   }
