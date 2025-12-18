@@ -139,17 +139,25 @@ class _TooltipOverlayState extends State<TooltipOverlay>
   ) {
     // 根据文本长度计算提示框宽度
     final tooltipWidth = _calculateTooltipWidth(message);
-
+    int adjustPosition = 12;
     switch (position) {
       case TooltipPosition.fileAreaCenter:
         // 文件区中央位置 (左侧区域的中央)
-        return MediaQuery.of(context).size.width * 0.25 - tooltipWidth / 2;
+        return MediaQuery.of(context).size.width * 0.25 -
+            tooltipWidth / 2 -
+            adjustPosition;
+
       case TooltipPosition.chatAreaCenter:
         // 对话区中央位置 (右侧区域的中央)
-        return MediaQuery.of(context).size.width * 0.75 - tooltipWidth / 2;
+        return MediaQuery.of(context).size.width * 0.75 -
+            tooltipWidth / 2 -
+            adjustPosition;
+
       case TooltipPosition.windowCenter:
         // 总窗口中央位置
-        return MediaQuery.of(context).size.width * 0.5 - tooltipWidth / 2;
+        return MediaQuery.of(context).size.width * 0.5 -
+            tooltipWidth / 2 -
+            adjustPosition;
     }
   }
 

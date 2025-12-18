@@ -76,32 +76,25 @@ class FileSectionState extends State<FileSection> {
     // 防止在处理中时导出
     if (_isProcessing) return;
 
-    setState(() {
-      _isProcessing = true;
-    });
-
     // 获取当前区域的文件列表
     final files = await FileManager().listFiles(widget.title, _currentPath);
 
     if (files.isEmpty) {
-      setState(() {
-        _isProcessing = false;
-      });
       return;
     }
 
     // 这里可以选择导出单个文件或多选导出
     if (files.length == 1) {
+      setState(() {
+        _isProcessing = true;
+      });
+      
       // 如果只有一个文件或文件夹，直接导出
       _exportSingleFile(files.first);
     } else {
       // 如果有多个文件，让用户选择要导出的文件
       _selectFilesToExport(files);
     }
-
-    setState(() {
-      _isProcessing = false;
-    });
   }
 
   // 解决文件夹名冲突
@@ -166,6 +159,12 @@ class FileSectionState extends State<FileSection> {
         TooltipPosition.fileAreaCenter,
       );
     }
+    
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
   }
 
   // 选择要导出的文件
@@ -218,6 +217,12 @@ class FileSectionState extends State<FileSection> {
                     onPressed: () async {
                       if (selectedFiles.isNotEmpty) {
                         Navigator.of(context).pop();
+                        
+                        // 设置处理状态
+                        setState(() {
+                          _isProcessing = true;
+                        });
+                        
                         // 执行导出操作
                         bool allSuccess = true;
                         for (final file in selectedFiles) {
@@ -231,8 +236,14 @@ class FileSectionState extends State<FileSection> {
                             allSuccess = false;
                           }
                         }
-
+                        
+                        // 显示导出结果提示
                         if (mounted) {
+                          TooltipUtil.showTooltip(
+                            allSuccess ? '文件导出成功' : '部分文件导出失败',
+                            TooltipPosition.fileAreaCenter,
+                          );
+                          
                           setState(() {
                             _isProcessing = false;
                           });
