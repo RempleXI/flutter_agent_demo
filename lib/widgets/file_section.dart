@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../models/file_info.dart';
 import '../services/file_manager.dart';
+import 'tooltip_overlay.dart';
 
 class FileSection extends StatefulWidget {
   final String title;
@@ -19,8 +20,10 @@ class FileSection extends StatefulWidget {
 class FileSectionState extends State<FileSection> {
   late Future<List<FileInfo>> _filesFuture;
   String _currentPath = '';
-  // 保存 ScaffoldMessengerState 的引用
+  // 防止重复操作的标志位
   ScaffoldMessengerState? _scaffoldMessenger;
+
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -42,6 +45,9 @@ class FileSectionState extends State<FileSection> {
   }
 
   void _navigateToDirectory(String dirName) {
+    // 防止在处理中时导航
+    if (_isProcessing) return;
+
     setState(() {
       _currentPath = '$_currentPath/$dirName';
       _refreshFiles();
@@ -49,6 +55,9 @@ class FileSectionState extends State<FileSection> {
   }
 
   void _navigateBack() {
+    // 防止在处理中时导航
+    if (_isProcessing) return;
+
     if (_currentPath.isNotEmpty) {
       setState(() {
         final parts = _currentPath.split('/');
@@ -64,15 +73,20 @@ class FileSectionState extends State<FileSection> {
 
   // 导出文件功能
   void _exportFiles() async {
+    // 防止在处理中时导出
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
     // 获取当前区域的文件列表
     final files = await FileManager().listFiles(widget.title, _currentPath);
 
     if (files.isEmpty) {
-      if (mounted) {
-        _scaffoldMessenger?.showSnackBar(
-          const SnackBar(content: Text('当前区域无文件可导出')),
-        );
-      }
+      setState(() {
+        _isProcessing = false;
+      });
       return;
     }
 
@@ -84,6 +98,10 @@ class FileSectionState extends State<FileSection> {
       // 如果有多个文件，让用户选择要导出的文件
       _selectFilesToExport(files);
     }
+
+    setState(() {
+      _isProcessing = false;
+    });
   }
 
   // 解决文件夹名冲突
@@ -138,18 +156,23 @@ class FileSectionState extends State<FileSection> {
       file.isDirectory,
     );
     if (success && mounted) {
-      _scaffoldMessenger?.showSnackBar(
-        SnackBar(content: Text('${file.isDirectory ? '文件夹' : '文件'}导出成功')),
+      TooltipUtil.showTooltip(
+        '${file.isDirectory ? '文件夹' : '文件'}导出成功',
+        TooltipPosition.fileAreaCenter,
       );
     } else if (mounted) {
-      _scaffoldMessenger?.showSnackBar(
-        SnackBar(content: Text('${file.isDirectory ? '文件夹' : '文件'}导出失败')),
+      TooltipUtil.showTooltip(
+        '${file.isDirectory ? '文件夹' : '文件'}导出失败',
+        TooltipPosition.fileAreaCenter,
       );
     }
   }
 
   // 选择要导出的文件
   void _selectFilesToExport(List<FileInfo> files) {
+    // 防止在处理中时导出
+    if (_isProcessing) return;
+
     final selectedFiles = <FileInfo>[];
 
     if (mounted) {
@@ -210,11 +233,9 @@ class FileSectionState extends State<FileSection> {
                         }
 
                         if (mounted) {
-                          _scaffoldMessenger?.showSnackBar(
-                            SnackBar(
-                              content: Text(allSuccess ? '文件导出成功' : '部分文件导出失败'),
-                            ),
-                          );
+                          setState(() {
+                            _isProcessing = false;
+                          });
                         }
                       }
                     },
@@ -350,20 +371,22 @@ class FileSectionState extends State<FileSection> {
             } catch (e) {
               allSuccess = false;
               if (mounted) {
-                _scaffoldMessenger?.showSnackBar(
-                  SnackBar(content: Text('文件 "${draggedFile.name}" 导入失败: $e')),
+                TooltipUtil.showTooltip(
+                  '文件 "${draggedFile.name}" 导入失败: $e',
+                  TooltipPosition.fileAreaCenter,
                 );
               }
             }
           }
 
           if (successCount > 0 && mounted) {
-            _scaffoldMessenger?.showSnackBar(
-              SnackBar(content: Text('$successCount 个文件/文件夹导入成功')),
+            TooltipUtil.showTooltip(
+              '$successCount 个文件/文件夹导入成功',
+              TooltipPosition.fileAreaCenter,
             );
             _refreshFiles();
 
-            // 通知父组件刷新所有区域
+            // 刷新所有区域
             widget.onFilesChanged?.call();
           }
         }
@@ -477,24 +500,18 @@ class FileSectionState extends State<FileSection> {
 
                             if (success) {
                               if (mounted) {
-                                _scaffoldMessenger?.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      '文件 "${file.name}" 已移动到 "$targetSection"',
-                                    ),
-                                  ),
+                                TooltipUtil.showTooltip(
+                                  '文件 "${file.name}" 已移动到 "$targetSection"',
+                                  TooltipPosition.fileAreaCenter,
                                 );
-                                _refreshFiles();
-
-                                // 通知父组件刷新所有区域
+                                // 刷新所有区域
                                 widget.onFilesChanged?.call();
                               }
                             } else {
                               if (mounted) {
-                                _scaffoldMessenger?.showSnackBar(
-                                  SnackBar(
-                                    content: Text('移动文件 "${file.name}" 失败'),
-                                  ),
+                                TooltipUtil.showTooltip(
+                                  '移动文件 "${file.name}" 失败',
+                                  TooltipPosition.fileAreaCenter,
                                 );
                               }
                             }
@@ -530,15 +547,20 @@ class FileSectionState extends State<FileSection> {
                 final success = await FileManager().deleteFile(file.path);
                 if (success) {
                   if (mounted) {
-                    _scaffoldMessenger?.showSnackBar(
-                      const SnackBar(content: Text('删除成功')),
+                    TooltipUtil.showTooltip(
+                      '删除成功',
+                      TooltipPosition.fileAreaCenter,
                     );
                     _refreshFiles();
+
+                    // 刷新所有区域
+                    widget.onFilesChanged?.call();
                   }
                 } else {
                   if (mounted) {
-                    _scaffoldMessenger?.showSnackBar(
-                      const SnackBar(content: Text('删除失败')),
+                    TooltipUtil.showTooltip(
+                      '删除失败',
+                      TooltipPosition.fileAreaCenter,
                     );
                   }
                 }
@@ -571,19 +593,21 @@ class FileSectionState extends State<FileSection> {
                   );
                   if (success) {
                     if (mounted) {
-                      _scaffoldMessenger?.showSnackBar(
-                        const SnackBar(content: Text('文件导入成功')),
+                      TooltipUtil.showTooltip(
+                        '文件导入成功',
+                        TooltipPosition.fileAreaCenter,
                       );
                       // 刷新文件列表
                       _refreshFiles();
 
-                      // 通知父组件刷新所有区域
+                      // 刷新所有区域
                       widget.onFilesChanged?.call();
                     }
                   } else {
                     if (mounted) {
-                      _scaffoldMessenger?.showSnackBar(
-                        const SnackBar(content: Text('文件导入失败')),
+                      TooltipUtil.showTooltip(
+                        '文件导入失败',
+                        TooltipPosition.fileAreaCenter,
                       );
                     }
                   }
@@ -600,19 +624,21 @@ class FileSectionState extends State<FileSection> {
                   );
                   if (success) {
                     if (mounted) {
-                      _scaffoldMessenger?.showSnackBar(
-                        const SnackBar(content: Text('文件夹导入成功')),
+                      TooltipUtil.showTooltip(
+                        '文件夹导入成功',
+                        TooltipPosition.fileAreaCenter,
                       );
                       // 刷新文件列表
                       _refreshFiles();
 
-                      // 通知父组件刷新所有区域
+                      // 刷新所有区域
                       widget.onFilesChanged?.call();
                     }
                   } else {
                     if (mounted) {
-                      _scaffoldMessenger?.showSnackBar(
-                        const SnackBar(content: Text('文件夹导入失败或已取消')),
+                      TooltipUtil.showTooltip(
+                        '文件夹导入失败或已取消',
+                        TooltipPosition.fileAreaCenter,
                       );
                     }
                   }
@@ -655,18 +681,7 @@ class _FileItemState extends State<_FileItem> {
     return GestureDetector(
       onDoubleTap: widget.onDoubleTap,
       onTap: () {
-        setState(() {
-          _isSelected = !_isSelected;
-        });
-
-        // 添加一个短暂的延迟然后取消选中状态，模拟点击反馈
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) {
-            setState(() {
-              _isSelected = false;
-            });
-          }
-        });
+        // 单击文件不产生视觉反馈
       },
       onLongPress: () {
         // 长按显示操作菜单
@@ -675,9 +690,7 @@ class _FileItemState extends State<_FileItem> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
-          color: _isSelected
-              ? Colors.blue.withOpacity(0.2)
-              : Colors.transparent,
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(4.0),
         ),
         child: ListTile(
@@ -688,9 +701,9 @@ class _FileItemState extends State<_FileItem> {
           ),
           title: Text(widget.file.name, style: const TextStyle(fontSize: 14)),
           subtitle: Text(
-            widget.file.isDirectory 
-              ? '文件夹' 
-              : '文件 • ${_formatFileSize(widget.file.size)}',
+            widget.file.isDirectory
+                ? '文件夹'
+                : '文件 • ${_formatFileSize(widget.file.size)}',
             style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 8.0),

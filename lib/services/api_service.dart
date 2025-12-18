@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../ai_config.dart';
 import '../models/chat_message.dart';
-import 'config_service.dart';
+import '../services/ai_prompt_config.dart'; // 更新导入路径
+import '../services/config_service.dart';
 
 class ApiService {
   // 发送消息到AI API
@@ -58,7 +58,7 @@ class ApiService {
     // 添加系统提示
     messages.add({
       'role': 'system',
-      'content': AiAssistantConfig.systemPrompt,
+      'content': AiPromptConfig.systemPrompt,
     });
     
     // 添加历史消息
