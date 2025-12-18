@@ -4,6 +4,6 @@
 /.idea/
 /.vscode/
 # 忽略TODO文件
-TODO.txt
+TODO.md
 # 忽略配置文件以防止API密钥泄露
 lib/config.dart
