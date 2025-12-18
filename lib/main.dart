@@ -6,6 +6,8 @@ import 'widgets/file_section.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'services/tool_decision_service.dart';
 import 'ai_config.dart';
+import 'services/config_service.dart';
+import 'widgets/config_dialog.dart';
 
 void main() {
   runApp(const MyApp());
@@ -61,6 +63,40 @@ class _MyHomePageState extends State<MyHomePage> {
   final GlobalKey<FileSectionState> _readSectionKey = GlobalKey();
   final GlobalKey<FileSectionState> _templateSectionKey = GlobalKey();
   final GlobalKey<FileSectionState> _resultSectionKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _initConfig().then((_) {
+      // 初始化完成后自动开始新对话
+      _resetChat();
+    });
+  }
+
+  Future<void> _initConfig() async {
+    final configService = ExternalConfigService();
+    await configService.init();
+
+    // 检查API密钥是否已设置
+    if (!configService.isApiKeySet() && mounted) {
+      _showConfigDialog();
+    }
+  }
+
+  Future<void> _showConfigDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return const ConfigDialog();
+      },
+    );
+
+    if (result == true && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('配置已保存')));
+    }
+  }
 
   // 发送消息
   Future<void> _sendMessage(String text) async {
@@ -133,9 +169,12 @@ class _MyHomePageState extends State<MyHomePage> {
         finalText = "工具执行结果 ($toolName):\n$toolResult\n\n用户原始问题: $text";
       }
 
-      // 获取AI回复
+      // 获取AI回复（传递对话历史）
       print('开始获取AI回复');
-      final aiMessage = await ApiService.sendMessage(finalText);
+      final aiMessage = await ApiService.sendMessage(
+        finalText,
+        List.unmodifiable(_messages),
+      );
       print('AI回复获取完成');
 
       if (aiMessage != null) {
@@ -194,6 +233,21 @@ class _MyHomePageState extends State<MyHomePage> {
         .forEach((state) => state.refreshFiles());
   }
 
+  void _resetChat() {
+    setState(() {
+      _messages.clear();
+    });
+
+    // 显示新对话开始的提示消息
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _messages.add(
+          ChatMessage(text: '您好！我是您的AI智能文档助手，有什么我可以帮您的吗？', isUser: false),
+        );
+      });
+    });
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -208,6 +262,23 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshAllSections,
+            tooltip: '刷新',
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _resetChat,
+            tooltip: '新对话',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showConfigDialog,
+            tooltip: '配置',
+          ),
+        ],
       ),
       body: Container(
         constraints: const BoxConstraints(minWidth: 1024, minHeight: 768),

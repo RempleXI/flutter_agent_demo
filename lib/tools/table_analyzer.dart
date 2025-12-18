@@ -52,7 +52,7 @@ class TableAnalyzer {
   "error": "文本格式错误：未检测到有效表头"
 }
 
-以下是用户提供的表格文本内容：
+以下是用户提供的表格文本内容： 
 $tableText
 ''';
 
@@ -70,9 +70,17 @@ $tableText
           if (decodedJson is Map &&
               (decodedJson.containsKey('table') ||
                   decodedJson.containsKey('error'))) {
+            // 如果返回了错误，但文本看起来像是有表头的，则尝试使用简单的默认处理
+            if (decodedJson.containsKey('error') && tableText.trim().isNotEmpty) {
+              // 尝试从文本中简单提取表头
+              return _trySimpleHeaderExtraction(tableText);
+            }
             return aiResponse.text;
           } else {
-            // 如果不是期望的格式，返回错误
+            // 如果不是期望的格式，尝试简单提取
+            if (tableText.trim().isNotEmpty) {
+              return _trySimpleHeaderExtraction(tableText);
+            }
             return '{"error": "AI返回格式错误: 请提供用户提供的表格文本内容，以便我进行分析和处理。"}';
           }
         } catch (e) {
@@ -82,17 +90,80 @@ $tableText
           } else if (aiResponse.text.contains("请提供") &&
               aiResponse.text.contains("内容")) {
             // AI在请求更多内容，这表示分析失败
+            // 尝试简单提取表头
+            if (tableText.trim().isNotEmpty) {
+              return _trySimpleHeaderExtraction(tableText);
+            }
             return '{"error": "AI返回格式错误: 请提供用户提供的表格文本内容，以便我进行分析和处理。"}';
           } else {
+            // 尝试简单提取表头
+            if (tableText.trim().isNotEmpty) {
+              return _trySimpleHeaderExtraction(tableText);
+            }
             // 尝试包装成错误信息
             return '{"error": "AI返回格式错误: ${aiResponse.text.replaceAll('"', '')}"}';
           }
         }
       } else {
+        // AI服务调用失败，尝试简单提取
+        if (tableText.trim().isNotEmpty) {
+          return _trySimpleHeaderExtraction(tableText);
+        }
         return '{"error": "AI服务调用失败"}';
       }
     } catch (e) {
+      // 出现异常，尝试简单提取
+      if (tableText.trim().isNotEmpty) {
+        return _trySimpleHeaderExtraction(tableText);
+      }
       return '{"error": "分析过程中发生错误: ${e.toString()}"}';
+    }
+  }
+
+  /// 尝试简单提取表头的备用方法
+  static String _trySimpleHeaderExtraction(String tableText) {
+    try {
+      final trimmedText = tableText.trim();
+      if (trimmedText.isEmpty) {
+        return '{"error": "文本为空"}';
+      }
+
+      // 简单按逗号分割第一行作为表头
+      final lines = trimmedText.split('\n');
+      if (lines.isEmpty) {
+        return '{"error": "文本格式错误"}';
+      }
+
+      final firstLine = lines[0].trim();
+      if (firstLine.isEmpty) {
+        return '{"error": "首行为空"}';
+      }
+
+      // 按逗号分割
+      List<String> headers = firstLine.split(',');
+      // 清理每个表头项
+      headers = headers.map((header) => header.trim()).where((header) => header.isNotEmpty).toList();
+
+      if (headers.isEmpty) {
+        // 尝试按制表符分割
+        headers = firstLine.split('\t');
+        headers = headers.map((header) => header.trim()).where((header) => header.isNotEmpty).toList();
+      }
+
+      if (headers.isNotEmpty) {
+        return '''
+{
+  "table": {
+    "columns": [${headers.map((h) => '"$h"').join(',')}],
+    "format": "horizontal"
+  }
+}
+''';
+      } else {
+        return '{"error": "无法提取有效表头"}';
+      }
+    } catch (e) {
+      return '{"error": "简单提取失败: ${e.toString()}"}';
     }
   }
 }

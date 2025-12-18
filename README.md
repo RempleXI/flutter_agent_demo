@@ -35,11 +35,14 @@ This project is a starting point for a Flutter application.
 
 要使用此应用程序，您需要配置硅基流动(SiliconFlow)的 API 密钥：
 
-1. 复制 `lib/config_example.dart` 文件并将其重命名为 `lib/config.dart`
-2. 在 [硅基流动平台](https://cloud.siliconflow.cn/) 获取您的 API 密钥
-3. 将 `config.dart` 文件中的 `YOUR_SILICON_FLOW_API_KEY_HERE` 替换为您的实际 API 密钥
+首次运行应用时，会弹出配置对话框，您也可以在应用右上角点击设置按钮来配置 API 密钥。
 
-注意：`config.dart` 文件已被添加到 `.gitignore` 中，以防止意外提交到版本控制系统。
+应用会在系统特定目录中创建配置文件 `app_config.json`：
+- Windows: `%APPDATA%/flutter_agent_demo/app_config.json`
+- macOS: `~/Library/Application Support/flutter_agent_demo/app_config.json`
+- Linux: `~/.local/share/flutter_agent_demo/app_config.json`
+
+您也可以直接编辑该文件来修改配置。
 
 ## 三 AI 机制配置
 
@@ -49,7 +52,7 @@ This project is a starting point for a Flutter application.
 - **决策 AI 模型** (`decisionModelName`)：专门用于判断是否需要调用外部工具
 - **分析 AI 模型** (`analysisModelName`)：专门用于字段提取等分析任务
 
-三个模型都可以在 `lib/config.dart` 文件中配置。默认情况下，我们使用 DeepSeek-V3.2 作为对话和分析模型，Qwen2.5-7B-Instruct 作为决策模型。
+这三个模型都可以在配置对话框中修改。默认情况下，我们使用 DeepSeek-V3.2 作为对话和分析模型，Qwen2.5-7B-Instruct 作为决策模型。
 
 ## Resources
 
