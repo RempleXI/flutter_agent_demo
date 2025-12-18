@@ -5,22 +5,23 @@ import '../services/api_service.dart';
 /// 用于根据读取区内容与表头、格式填写表格内容
 class TableFiller {
   /// 根据读取区内容、表头和格式填写表格
-  /// 
+  ///
   /// 参数:
   /// - contentText: 读取区的纯文本内容
   /// - headers: 表头列表
   /// - format: 表格格式 ("horizontal" 或 "vertical")
-  /// 
+  ///
   /// 返回:
   /// - 成功时返回包含填充数据的JSON字符串
   /// - 失败时返回错误信息
   static Future<String> fillTableContent(
-    String contentText, 
-    List<String> headers, 
-    String format
+    String contentText,
+    List<String> headers,
+    String format,
   ) async {
     // 构造给AI的完整提示词
-    final prompt = '''
+    final prompt =
+        '''
 你是一个数据整理助手。
 请严格按以下要求处理：
 
@@ -97,8 +98,8 @@ $format
 
     try {
       // 调用AI服务填充表格
-      final aiResponse = await ApiService.sendMessage(prompt);
-      
+      final aiResponse = await ApiService.sendMessage(prompt, []);
+
       if (aiResponse != null) {
         // 尝试解析AI返回的JSON
         try {
@@ -107,13 +108,14 @@ $format
               .trim()
               .replaceAll(RegExp(r'^[^{]*'), '') // 移除开头的非JSON内容
               .replaceAll(RegExp(r'[^}]*$'), ''); // 移除结尾的非JSON内容
-              
+
           // 验证返回内容是否为有效的JSON
           final decodedJson = json.decode(cleanedResponse);
-          
+
           // 检查是否是有效的表格填充结果
-          if (decodedJson is Map && 
-              (decodedJson.containsKey('success') || decodedJson.containsKey('error'))) {
+          if (decodedJson is Map &&
+              (decodedJson.containsKey('success') ||
+                  decodedJson.containsKey('error'))) {
             return cleanedResponse;
           } else {
             // 如果不是期望的格式，返回错误
@@ -123,7 +125,8 @@ $format
           // 如果不是有效JSON，检查是否包含有用信息
           if (aiResponse.text.trim().isEmpty) {
             return '{"error": "AI返回空响应"}';
-          } else if (aiResponse.text.contains("请提供") && aiResponse.text.contains("内容")) {
+          } else if (aiResponse.text.contains("请提供") &&
+              aiResponse.text.contains("内容")) {
             // AI在请求更多内容，这表示填充失败
             return '{"error": "AI返回格式错误: 请提供正确的参数内容，以便我进行处理。"}';
           } else {

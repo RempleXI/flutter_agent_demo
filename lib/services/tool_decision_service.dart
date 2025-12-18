@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../config.dart';
 import '../ai_config.dart';
 import '../services/file_manager.dart';
 import '../models/file_info.dart';
 import '../tools/document_table_filler.dart';
+import 'config_service.dart';
 
 /// 工具类型枚举 - 大类别
 enum ToolCategory {
@@ -166,14 +166,19 @@ class ToolDecisionService {
       // 添加超时机制
       final http.Response response;
       try {
+        final configService = ExternalConfigService();
+        final baseUrl = configService.get('siliconFlowBaseUrl');
+        final apiKey = configService.get('siliconFlowApiKey');
+        final decisionModelName = configService.get('decisionModelName');
+        
         response = await http.post(
-          Uri.parse(ApiConfig.siliconFlowBaseUrl),
+          Uri.parse(baseUrl),
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${ApiConfig.siliconFlowApiKey}',
+            'Authorization': 'Bearer $apiKey',
           },
           body: jsonEncode({
-            'model': ApiConfig.decisionModelName,
+            'model': decisionModelName,
             'messages': [
               {'role': 'user', 'content': prompt},
             ],
