@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/chat_message.dart';
-import '../services/ai_prompt_config.dart'; // 更新导入路径
+import '../services/ai_prompt_config.dart';
 import '../services/config_service.dart';
 
 class ApiService {
