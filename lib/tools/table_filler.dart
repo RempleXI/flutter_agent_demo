@@ -20,12 +20,18 @@ class TableFiller {
     List<String> headers,
     String format,
   ) async {
+    // 记录开始时间
+    final startTime = DateTime.now();
+    print('TableFiller: 开始处理内容 at $startTime');
+    
     try {
       // 第一步：使用正则表达式初步提取数据
       final preliminaryData = _extractDataWithRegex(contentText, headers);
+      print('TableFiller: 第一步完成，初步数据提取完成');
 
       // 第二步：计算置信度
       final confidence = _calculateConfidence(preliminaryData, headers);
+      print('TableFiller: 第二步完成，置信度计算完成');
 
       // 第三步：将初步数据、置信度和原始内容传递给AI进一步完善
       final aiResult = await _refineWithAI(
@@ -36,13 +42,19 @@ class TableFiller {
         confidence,
       );
 
-      // 输出返回的JSON到终端
-      print('TableFiller result: $aiResult');
+      // 记录结束时间并计算耗时
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+      print('TableFiller: AI返回消息 at $endTime');
+      print('TableFiller: 总耗时 ${duration.inMilliseconds} 毫秒');
 
       return aiResult;
     } catch (e) {
       final errorResult = '{"error": "填充过程中发生错误: ${e.toString()}"}';
-      print('TableFiller error: $errorResult');
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+      print('TableFiller: 处理出错 at $endTime');
+      print('TableFiller: 总耗时 ${duration.inMilliseconds} 毫秒');
       return errorResult;
     }
   }
