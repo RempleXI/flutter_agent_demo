@@ -7,7 +7,8 @@ import 'logger_service.dart';
 /// 外部配置服务
 /// 使用path_provider管理外部配置文件，使配置可以在部署后修改
 class ExternalConfigService {
-  static final ExternalConfigService _instance = ExternalConfigService._internal();
+  static final ExternalConfigService _instance =
+      ExternalConfigService._internal();
   factory ExternalConfigService() => _instance;
   ExternalConfigService._internal();
 
@@ -63,6 +64,13 @@ class ExternalConfigService {
       'chatModelName': 'deepseek-ai/DeepSeek-V3.2',
       'decisionModelName': 'Qwen/Qwen2.5-7B-Instruct',
       'analysisModelName': 'deepseek-ai/DeepSeek-V3.2',
+      // 数据库配置
+      'databaseUrl': '',
+      'databaseUsername': '',
+      'databasePassword': '',
+      'databaseTableName': '',
+      'databaseType': '',
+      'databaseName': '',
     };
   }
 
