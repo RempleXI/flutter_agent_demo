@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:archive/archive.dart';
+import 'package:excel/excel.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_pdf_text/flutter_pdf_text.dart';
+import 'package:html/parser.dart' as html_parser;
+import 'package:archive/archive.dart';
+import '../services/logger_service.dart';
 
 /// 文件类型枚举
 enum FileType { word, excel, powerpoint, pdf, text, markdown, unknown }
@@ -64,51 +67,51 @@ class DocumentConverter {
     FileType fileType,
     String fileName,
   ) async {
-    print('正在分析: $fileName');
+    logger.i('正在分析: $fileName');
 
     switch (fileType) {
       case FileType.word:
-        print('正在预处理Word文档: $fileName');
+        logger.i('正在预处理Word文档: $fileName');
         final result = await _preprocessWord(fileBytes, fileName);
-        print('预处理结束: $fileName');
+        logger.i('预处理结束: $fileName');
         return result;
 
       case FileType.excel:
-        print('正在预处理Excel文档: $fileName');
+        logger.i('正在预处理Excel文档: $fileName');
         final result = await _preprocessExcel(fileBytes, fileName);
-        print('预处理结束: $fileName');
+        logger.i('预处理结束: $fileName');
         return result;
 
       case FileType.powerpoint:
-        print('正在预处理PowerPoint文档: $fileName');
+        logger.i('正在预处理PowerPoint文档: $fileName');
         final result = await _preprocessPowerPoint(fileBytes, fileName);
-        print('预处理结束: $fileName');
+        logger.i('预处理结束: $fileName');
         return result;
 
       case FileType.pdf:
-        print('正在预处理PDF文档: $fileName');
+        logger.i('正在预处理PDF文档: $fileName');
         final result = await _preprocessPdf(fileBytes, fileName);
-        print('预处理结束: $fileName');
+        logger.i('预处理结束: $fileName');
         return result;
 
       case FileType.text:
       case FileType.markdown:
         // 特别处理CSV文件
         if (fileName.toLowerCase().endsWith('.csv')) {
-          print('正在预处理CSV文件: $fileName');
+          logger.i('正在预处理CSV文件: $fileName');
           final result = await _preprocessText(fileBytes, fileName);
-          print('预处理结束: $fileName');
+          logger.i('预处理结束: $fileName');
           return result;
         }
         if (fileType == FileType.text) {
-          print('正在预处理文本文件: $fileName');
+          logger.i('正在预处理文本文件: $fileName');
           final result = await _preprocessText(fileBytes, fileName);
-          print('预处理结束: $fileName');
+          logger.i('预处理结束: $fileName');
           return result;
         } else {
-          print('正在预处理Markdown文件: $fileName');
+          logger.i('正在预处理Markdown文件: $fileName');
           final result = await _preprocessMarkdown(fileBytes, fileName);
-          print('预处理结束: $fileName');
+          logger.i('预处理结束: $fileName');
           return result;
         }
 
@@ -116,12 +119,16 @@ class DocumentConverter {
         // 对于未知类型，尝试按文件扩展名判断
         final lowerFileName = fileName.toLowerCase();
         if (lowerFileName.endsWith('.csv')) {
-          print('检测到CSV文件: $fileName');
+          logger.i('检测到CSV文件: $fileName');
           final result = await _preprocessText(fileBytes, fileName);
-          print('预处理结束: $fileName');
+          logger.i('预处理结束: $fileName');
           return result;
         }
-        throw Exception('不支持的文件类型: ${getFileTypeDescription(fileType)}');
+        
+        // 默认作为文本文件处理
+        final result = await _preprocessText(fileBytes, fileName);
+        logger.i('未知文件类型，默认按文本处理: $fileName');
+        return result;
     }
   }
 
@@ -266,14 +273,14 @@ class DocumentConverter {
         }
         allTextContent = uniqueTexts;
 
-        print('通过所有方法提取的文本数量: ${allTextContent.length}');
-        print('提取的文本内容: ${allTextContent.take(20).join(", ")}${allTextContent.length > 20 ? "..." : ""}');
+        logger.i('通过所有方法提取的文本数量: ${allTextContent.length}');
+        logger.i('提取的文本内容: ${allTextContent.take(20).join(", ")}${allTextContent.length > 20 ? "..." : ""}');
 
         // 尝试构建CSV格式的内容
         String csvContent = _buildCsvFromExcelContent(archive, sharedStrings);
         
         final fullTextContent = allTextContent.join('\n').trim();
-        print('最终合并后的文本内容长度: ${fullTextContent.length}');
+        logger.i('最终合并后的文本内容长度: ${fullTextContent.length}');
 
         // 提取内部文本内容预览
         String textPreview = fullTextContent;
@@ -858,7 +865,7 @@ class DocumentConverter {
         }
       }
     } catch (e) {
-      print('构建CSV内容时出错: $e');
+      logger.e('构建CSV内容时出错', e);
     }
     
     return '';
@@ -961,7 +968,7 @@ class DocumentConverter {
       
       return csvLines.join('\n');
     } catch (e) {
-      print('解析工作表为CSV时出错: $e');
+      logger.e('解析工作表为CSV时出错', e);
       return '';
     }
   }
@@ -977,6 +984,6 @@ class DocumentConverter {
 
     // 在实际实现中，您需要使用dart:io库来保存文件
     // 这里只是一个占位符
-    print('保存预处理结果到: $outputPath');
+    logger.i('保存预处理结果到: $outputPath');
   }
 }

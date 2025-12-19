@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'logger_service.dart';
 
 /// 外部配置服务
 /// 使用path_provider管理外部配置文件，使配置可以在部署后修改
@@ -28,14 +29,14 @@ class ExternalConfigService {
       if (await configFile.exists()) {
         final jsonString = await configFile.readAsString();
         _config = jsonDecode(jsonString);
-        print('配置文件加载成功: ${configFile.path}');
+        logger.i('配置文件加载成功: ${configFile.path}');
       } else {
         // 如果配置文件不存在，创建默认配置
         await _createDefaultConfig(configFile);
-        print('创建默认配置文件: ${configFile.path}');
+        logger.i('创建默认配置文件: ${configFile.path}');
       }
     } catch (e) {
-      print('加载配置文件时出错: $e');
+      logger.e('加载配置文件时出错', e);
       // 出错时使用默认配置
       _config = _getDefaultConfig();
     }

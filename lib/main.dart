@@ -8,6 +8,7 @@ import 'services/tool_decision_service.dart';
 import 'services/config_service.dart';
 import 'widgets/config_dialog.dart';
 import 'widgets/tooltip_overlay.dart';
+import 'services/logger_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -111,26 +112,26 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _sendMessage(String text) async {
     if (text.isEmpty) return;
 
-    setState(() {
-      _messages.add(ChatMessage(text: text, isUser: true));
-      _textController.clear();
-      _isLoading = true;
-    });
-
     // 滚动到最新消息
     _scrollToBottom();
 
     try {
+      setState(() {
+        _messages.add(ChatMessage(text: text, isUser: true));
+        _textController.clear();
+        _isLoading = true;
+      });
+
       // 使用双AI机制判断是否需要调用工具
-      print('开始工具决策过程');
+      logger.i('开始工具决策过程');
       final toolInfo = await ToolDecisionService.shouldCallTool(text);
-      print('工具决策结果: 类别=${toolInfo.category}, 具体工具=${toolInfo.specificTool}');
+      logger.i('工具决策结果: 类别=${toolInfo.category}, 具体工具=${toolInfo.specificTool}');
 
       String? toolResult;
       String? toolName;
       bool needRefresh = false;
       if (toolInfo.category != ToolCategory.none) {
-        print('检测到需要调用工具: ${toolInfo.displayName}');
+        logger.i('检测到需要调用工具: ${toolInfo.displayName}');
         // 添加工具调用提示消息（显示通用类别名称）
         setState(() {
           _messages.add(
@@ -143,10 +144,10 @@ class _MyHomePageState extends State<MyHomePage> {
         });
 
         // 执行工具调用
-        print('开始执行工具: ${toolInfo.specificToolName}');
+        logger.i('开始执行工具: ${toolInfo.specificToolName}');
         toolResult = await ToolDecisionService.executeTool(toolInfo, text);
         toolName = toolInfo.displayName;
-        print('工具执行结果: $toolResult');
+        logger.i('工具执行结果: $toolResult');
 
         // 检查是否需要刷新界面
         if (toolInfo.specificTool == SpecificTool.tableFill ||
@@ -169,7 +170,7 @@ class _MyHomePageState extends State<MyHomePage> {
           });
         }
       } else {
-        print('未检测到需要调用的工具');
+        logger.i('未检测到需要调用的工具');
       }
 
       // 将工具结果加入到AI请求中
@@ -179,12 +180,12 @@ class _MyHomePageState extends State<MyHomePage> {
       }
 
       // 获取AI回复（传递对话历史）
-      print('开始获取AI回复');
+      logger.i('开始获取AI回复');
       final aiMessage = await ApiService.sendMessage(
         finalText,
         List.unmodifiable(_messages),
       );
-      print('AI回复获取完成');
+      logger.i('AI回复获取完成');
 
       if (aiMessage != null) {
         setState(() {
@@ -194,18 +195,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
       // 如果需要刷新界面，则刷新所有区域
       if (needRefresh) {
-        print('刷新文件区域界面');
+        logger.i('刷新文件区域界面');
         _refreshAllSections();
       }
     } catch (e, stackTrace) {
-      print('处理消息时发生错误: $e');
-      print('错误堆栈: $stackTrace');
+      logger.e('处理消息时发生错误', e, stackTrace);
       // 添加错误消息到聊天界面
       setState(() {
         _messages.add(ChatMessage(text: '处理您的请求时发生了错误，请稍后重试。', isUser: false));
       });
     } finally {
-      print('设置加载状态为false');
+      logger.i('设置加载状态为false');
       setState(() {
         _isLoading = false;
       });

@@ -10,6 +10,7 @@ import '../tools/document_table_filler.dart';
 import '../tools/directory_viewer.dart';
 import '../services/file_manager.dart';
 import '../models/file_info.dart';
+import 'logger_service.dart';
 
 /// 工具类型枚举 - 大类别
 enum ToolCategory {
@@ -70,7 +71,7 @@ class ToolInfo {
 class ToolDecisionService {
   /// 使用副AI模型判断需要调用哪种工具
   static Future<ToolInfo> shouldCallTool(String userMessage) async {
-    print('开始工具决策过程: $userMessage');
+    logger.i('开始工具决策过程: $userMessage');
 
     // 检查是否包含否定词，如果包含则直接使用AI决策模型
     final negationWords = ['不', '别', '不要', '不能', '不可以', '无需', '无须'];
@@ -79,26 +80,26 @@ class ToolDecisionService {
     );
 
     if (containsNegation) {
-      print('消息中包含否定词，直接使用AI决策模型');
+      logger.i('消息中包含否定词，直接使用AI决策模型');
       return _useAIDecisionModel(userMessage);
     }
 
     // 首先尝试使用关键词匹配
     final matchedTools = _findAllMatchingTools(userMessage);
-    print('关键词匹配结果: 匹配到 ${matchedTools.length} 个工具');
+    logger.i('关键词匹配结果: 匹配到 ${matchedTools.length} 个工具');
 
     // 如果只有一个匹配项，直接返回该工具
     if (matchedTools.length == 1) {
-      print('只有一个匹配项，直接返回: ${matchedTools[0].specificToolName}');
+      logger.i('只有一个匹配项，直接返回: ${matchedTools[0].specificToolName}');
       return matchedTools[0];
     }
 
     // 如果没有匹配项或有多个匹配项，使用AI决策模型
     if (matchedTools.isEmpty || matchedTools.length > 1) {
       if (matchedTools.isEmpty) {
-        print('未找到匹配的关键词，使用AI决策模型');
+        logger.i('未找到匹配的关键词，使用AI决策模型');
       } else {
-        print(
+        logger.i(
           '找到多个匹配项 (${matchedTools.length} 个)，使用AI决策模型: ${matchedTools.map((t) => t.specificToolName).join(', ')}',
         );
       }
@@ -203,32 +204,32 @@ class ToolDecisionService {
             )
             .timeout(Duration(seconds: 30)); // 设置30秒超时
       } catch (timeoutError) {
-        print('AI决策模型调用超时: $timeoutError');
+        logger.w('AI决策模型调用超时', timeoutError);
         // 超时后回退到关键词匹配
         return analyzeMessage(userMessage);
       }
 
-      print('AI决策模型响应状态码: ${response.statusCode}');
+      logger.i('AI决策模型响应状态码: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final aiResponse = data['choices'][0]['message']['content']
             .trim()
             .toUpperCase();
-        print('AI决策模型返回结果: $aiResponse');
+        logger.i('AI决策模型返回结果: $aiResponse');
 
         // 根据副AI的回答决定调用哪种工具
         return _mapAiResponseToToolInfo(aiResponse, userMessage);
       } else {
-        print(
+        logger.e(
           'AI决策模型调用失败，状态码: ${response.statusCode}，响应内容: ${response.body}，使用关键词匹配作为后备方案',
         );
         // 如果API调用失败，回退到关键词匹配
         return analyzeMessage(userMessage);
       }
     } catch (e, stackTrace) {
-      print('AI决策模型调用异常: $e');
-      print('异常堆栈信息: $stackTrace');
+      logger.e('AI决策模型调用异常: $e');
+      logger.e('异常堆栈信息: $stackTrace');
       // 如果出现异常，回退到关键词匹配
       return analyzeMessage(userMessage);
     }
@@ -373,7 +374,7 @@ class ToolDecisionService {
     String aiResponse,
     String userMessage,
   ) {
-    print('映射AI响应到工具信息: $aiResponse');
+    logger.i('映射AI响应到工具信息: $aiResponse');
     switch (aiResponse) {
       // 文档处理类工具
       case 'FORMAT_CONVERSION':
@@ -458,7 +459,7 @@ class ToolDecisionService {
         );
 
       default:
-        print('未识别的AI响应: $aiResponse，使用关键词匹配作为后备方案');
+        logger.w('未识别的AI响应: $aiResponse，使用关键词匹配作为后备方案');
         // 如果副AI回答不是预定义的工具类型，则回退到工具管理器的关键词匹配
         return analyzeMessage(userMessage);
     }
@@ -467,7 +468,7 @@ class ToolDecisionService {
   /// 分析用户消息并决定是否需要调用工具
   /// 基于关键词判断需要调用的工具类型
   static ToolInfo analyzeMessage(String message) {
-    print('使用关键词匹配分析消息: $message');
+    logger.i('使用关键词匹配分析消息: $message');
 
     // 检查是否包含否定词，如果包含则直接返回无工具
     final negationWords = ['不', '别', '不要', '不能', '不可以', '无需', '无须'];
@@ -476,7 +477,7 @@ class ToolDecisionService {
     );
 
     if (containsNegation) {
-      print('消息中包含否定词，不进行关键词匹配，直接返回无工具');
+      logger.i('消息中包含否定词，不进行关键词匹配，直接返回无工具');
       return ToolInfo(
         category: ToolCategory.none,
         specificTool: SpecificTool.none,
@@ -490,17 +491,17 @@ class ToolDecisionService {
 
     // 如果只有一个匹配项，直接返回
     if (matchedTools.length == 1) {
-      print('关键词匹配到单个工具: ${matchedTools[0].specificToolName}');
+      logger.i('关键词匹配到单个工具: ${matchedTools[0].specificToolName}');
       return matchedTools[0];
     }
 
     // 如果有多个匹配项或没有匹配项，返回空工具
     if (matchedTools.length > 1) {
-      print(
+      logger.i(
         '关键词匹配到多个工具: ${matchedTools.map((t) => t.specificToolName).join(', ')}',
       );
     } else {
-      print('未匹配到任何工具');
+      logger.i('未匹配到任何工具');
     }
 
     return ToolInfo(

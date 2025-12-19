@@ -2,11 +2,11 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:path/path.dart' as path;
 import '../services/file_manager.dart';
-import '../services/tool_decision_service.dart';
-import 'document_converter.dart';
-import 'table_analyzer.dart';
-import 'table_filler.dart';
-import 'xlsx_generator.dart';
+import '../tools/document_converter.dart';
+import '../tools/table_analyzer.dart';
+import '../tools/table_filler.dart';
+import '../tools/xlsx_generator.dart';
+import '../services/logger_service.dart';
 
 /// 文档表格填充工具类
 /// 实现根据文档内容自动填充Excel表格的完整流程
@@ -24,15 +24,15 @@ class DocumentTableFiller {
   /// 8. 调用【根据整理后文本内容填写表格】的工具，在结果区创建填写完毕后的Excel文件
   /// 9. 重复处理下一个模板区文件，直至全部处理完成
   static Future<void> fillTablesFromDocuments() async {
-    print('开始执行文档表格填充流程');
+    logger.i('开始执行文档表格填充流程');
 
     // 1. 预处理所有读取区文件，获取读取区全部文件的文本内容
     final readContent = await _preprocessAllReadFiles();
-    print('已完成读取区文件预处理');
+    logger.i('已完成读取区文件预处理');
 
     // 2. 调用查看模板区目录，获取模板区目录
     final templateFiles = await _getTemplateFiles();
-    print('模板区文件列表: $templateFiles');
+    logger.i('模板区文件列表: $templateFiles');
 
     // 3. 判断共有几个文件需要处理
     // 过滤掉错误信息和空目录提示
@@ -46,36 +46,36 @@ class DocumentTableFiller {
         .toList();
 
     if (validTemplateFiles.isEmpty) {
-      print('模板区没有需要处理的有效文件');
+      logger.w('模板区没有需要处理的有效文件');
       return;
     }
 
-    print('共需要处理 ${validTemplateFiles.length} 个文件');
+    logger.i('共需要处理 ${validTemplateFiles.length} 个文件');
 
     // 4. 根据目录顺序处理每个文件
     for (int i = 0; i < validTemplateFiles.length; i++) {
       final fileName = validTemplateFiles[i];
-      print('正在处理第 ${i + 1} 个文件: $fileName');
+      logger.i('正在处理第 ${i + 1} 个文件: $fileName');
 
       // 5. 预处理当前模板区文件
       final processedFileData = await _preprocessCurrentTemplateFile(fileName);
       if (processedFileData == null) {
-        print('文件 $fileName 预处理失败，跳过');
+        logger.w('文件 $fileName 预处理失败，跳过');
         continue;
       }
 
       // 6. 调用分析工具，获取需要填写的Excel的表头与格式
       // 传入的是模板区文件预处理后的内容
       final textContent = processedFileData['textContent'] as String;
-      print('准备传给表格分析工具的文本内容:');
-      print('----------------------------------------');
+      logger.i('准备传给表格分析工具的文本内容:');
+      logger.i('----------------------------------------');
       if (textContent.isEmpty) {
-        print('(空内容)');
+        logger.i('(空内容)');
       } else {
-        print(textContent);
+        logger.i(textContent);
       }
-      print('----------------------------------------');
-      print('文本内容长度: ${textContent.length}');
+      logger.i('----------------------------------------');
+      logger.i('文本内容长度: ${textContent.length}');
 
       final tableAnalysis = await TableAnalyzer.analyzeTableHeaders(
         textContent,
@@ -83,7 +83,7 @@ class DocumentTableFiller {
 
       final analysisResult = json.decode(tableAnalysis);
       if (analysisResult.containsKey('error')) {
-        print('文件 $fileName 表头分析失败: ${analysisResult['error']}');
+        logger.e('文件 $fileName 表头分析失败: ${analysisResult['error']}');
         continue;
       }
 
@@ -91,7 +91,7 @@ class DocumentTableFiller {
       final headers = List<String>.from(tableInfo['columns']);
       final format = tableInfo['format'] as String;
 
-      print('文件 $fileName 分析完成，表头: $headers，格式: $format');
+      logger.i('文件 $fileName 分析完成，表头: $headers，格式: $format');
 
       // 7. 调用填充工具，获取需要填写Excel的全部内容
       final filledContent = await TableFiller.fillTableContent(
@@ -102,10 +102,10 @@ class DocumentTableFiller {
 
       // 8. 调用XLSX生成器，在结果区创建填写完毕后的Excel文件
       await _generateXlsxFile(fileName, filledContent);
-      print('文件 $fileName 处理完成');
+      logger.i('文件 $fileName 处理完成');
     }
 
-    print('文档表格填充流程执行完毕');
+    logger.i('文档表格填充流程执行完毕');
   }
 
   /// 预处理所有读取区文件，获取读取区全部文件的文本内容
@@ -114,7 +114,7 @@ class DocumentTableFiller {
     final readDir = await FileManager().getSectionDirectory('读取');
 
     if (!await readDir.exists()) {
-      print('读取区目录不存在: ${readDir.path}');
+      logger.w('读取区目录不存在: ${readDir.path}');
       return '';
     }
 
@@ -127,7 +127,7 @@ class DocumentTableFiller {
         if (entity is File) {
           fileCount++;
           final fileName = path.basename(entity.path);
-          print('正在预处理读取区文件: $fileName');
+          logger.i('正在预处理读取区文件: $fileName');
 
           try {
             // 读取文件内容
@@ -146,16 +146,16 @@ class DocumentTableFiller {
             contentBuffer.writeln(processedData['textContent']);
             contentBuffer.writeln(); // 添加空行分隔
           } catch (e) {
-            print('预处理文件 $fileName 时出错: $e');
+            logger.e('预处理文件 $fileName 时出错', e);
           }
         }
       }
 
       if (fileCount == 0) {
-        print('读取区目录为空');
+        logger.i('读取区目录为空');
       }
     } catch (e) {
-      print('读取读取区目录时出错: $e');
+      logger.e('读取读取区目录时出错', e);
     }
 
     return contentBuffer.toString();
@@ -195,14 +195,14 @@ class DocumentTableFiller {
       final file = File(filePath);
 
       if (!file.existsSync()) {
-        print('文件不存在: $filePath');
+        logger.w('文件不存在: $filePath');
         return null;
       }
 
       final bytes = await file.readAsBytes();
       final fileType = DocumentConverter.detectFileType(fileName);
 
-      print(
+      logger.i(
         '文件 $fileName 的类型: ${DocumentConverter.getFileTypeDescription(fileType)}',
       );
 
@@ -213,34 +213,34 @@ class DocumentTableFiller {
       );
 
       // 打印预处理结果的详细信息
-      print('文件 $fileName 预处理结果:');
-      print('- 类型: ${processedData['type']}');
-      print('- 格式: ${processedData['format']}');
-      print('- 文件大小: ${processedData['fileSize']} 字节');
+      logger.i('文件 $fileName 预处理结果:');
+      logger.i('- 类型: ${processedData['type']}');
+      logger.i('- 格式: ${processedData['format']}');
+      logger.i('- 文件大小: ${processedData['fileSize']} 字节');
 
       if (processedData.containsKey('textContent')) {
         final textContent = processedData['textContent'] as String;
-        print('- 文本内容长度: ${textContent.length} 字符');
-        print(
+        logger.i('- 文本内容长度: ${textContent.length} 字符');
+        logger.i(
           '- 文本内容预览: ${textContent.substring(0, (textContent.length < 200 ? textContent.length : 200))}',
         );
       }
 
       if (processedData.containsKey('error')) {
-        print('- 错误信息: ${processedData['error']}');
+        logger.e('- 错误信息: ${processedData['error']}');
       }
 
       if (processedData.containsKey('sheetNames')) {
-        print('- 工作表名称: ${processedData['sheetNames']}');
+        logger.i('- 工作表名称: ${processedData['sheetNames']}');
       }
 
       if (processedData.containsKey('sharedStringsCount')) {
-        print('- 共享字符串数量: ${processedData['sharedStringsCount']}');
+        logger.i('- 共享字符串数量: ${processedData['sharedStringsCount']}');
       }
 
       return processedData;
     } catch (e) {
-      print('预处理模板区文件 $fileName 时出错: $e');
+      logger.e('预处理模板区文件 $fileName 时出错', e);
       return null;
     }
   }
@@ -261,7 +261,7 @@ class DocumentTableFiller {
           
       final analysisResult = json.decode(cleanedJsonContent);
       if (analysisResult.containsKey('error')) {
-        print('表格填充失败: ${analysisResult['error']}');
+        logger.e('表格填充失败: ${analysisResult['error']}');
         return;
       }
 
@@ -274,11 +274,11 @@ class DocumentTableFiller {
         cleanedJsonContent,
         resultFileName,
       );
-      print('Excel文件已生成: $filePath');
+      logger.i('Excel文件已生成: $filePath');
     } catch (e) {
-      print('生成XLSX文件时出错: $e');
+      logger.e('生成XLSX文件时出错', e);
       // 提供更详细的错误信息
-      print('原始JSON内容: $jsonContent');
+      logger.e('原始JSON内容: $jsonContent');
     }
   }
 }
