@@ -88,7 +88,7 @@ class FileSectionState extends State<FileSection> {
       setState(() {
         _isProcessing = true;
       });
-      
+
       // 如果只有一个文件或文件夹，直接导出
       _exportSingleFile(files.first);
     } else {
@@ -159,7 +159,7 @@ class FileSectionState extends State<FileSection> {
         TooltipPosition.fileAreaCenter,
       );
     }
-    
+
     if (mounted) {
       setState(() {
         _isProcessing = false;
@@ -217,12 +217,12 @@ class FileSectionState extends State<FileSection> {
                     onPressed: () async {
                       if (selectedFiles.isNotEmpty) {
                         Navigator.of(context).pop();
-                        
+
                         // 设置处理状态
                         setState(() {
                           _isProcessing = true;
                         });
-                        
+
                         // 执行导出操作
                         bool allSuccess = true;
                         for (final file in selectedFiles) {
@@ -236,14 +236,14 @@ class FileSectionState extends State<FileSection> {
                             allSuccess = false;
                           }
                         }
-                        
+
                         // 显示导出结果提示
                         if (mounted) {
                           TooltipUtil.showTooltip(
                             allSuccess ? '文件导出成功' : '部分文件导出失败',
                             TooltipPosition.fileAreaCenter,
                           );
-                          
+
                           setState(() {
                             _isProcessing = false;
                           });
@@ -686,6 +686,7 @@ class _FileItem extends StatefulWidget {
 
 class _FileItemState extends State<_FileItem> {
   bool _isSelected = false;
+  bool _isHovered = false; // 添加悬停状态
 
   @override
   Widget build(BuildContext context) {
@@ -698,83 +699,87 @@ class _FileItemState extends State<_FileItem> {
         // 长按显示操作菜单
         _showContextMenu(context);
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(4.0),
-        ),
-        child: ListTile(
-          dense: true,
-          leading: Icon(
-            widget.file.isDirectory ? Icons.folder : Icons.description,
-            size: 20,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _isHovered ? Colors.grey[200] : null, // 悬停时变灰
+            borderRadius: BorderRadius.circular(4.0),
           ),
-          title: Text(widget.file.name, style: const TextStyle(fontSize: 14)),
-          subtitle: Text(
-            widget.file.isDirectory
-                ? '文件夹'
-                : '文件 • ${_formatFileSize(widget.file.size)}',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8.0),
-          trailing: PopupMenuButton<String>(
-            onSelected: (String value) {
-              switch (value) {
-                case 'open':
-                  // 对于文件夹，进入下一级；对于文件，执行双击操作
-                  if (widget.file.isDirectory) {
-                    // 进入文件夹
-                    widget.onDoubleTap(); // 这会调用 _navigateToDirectory 方法
-                  } else {
-                    // 打开文件
-                    widget.onDoubleTap(); // 这会调用 FileManager().openFile 方法
-                  }
-                  break;
-                case 'delete':
-                  widget.onDelete();
-                  break;
-                case 'move_to_waiting':
-                  widget.onMoveToSection('等待');
-                  break;
-                case 'move_to_read':
-                  widget.onMoveToSection('读取');
-                  break;
-                case 'move_to_template':
-                  widget.onMoveToSection('模板');
-                  break;
-                case 'move_to_result':
-                  widget.onMoveToSection('结果');
-                  break;
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              // 为文件和文件夹都添加打开选项
-              const PopupMenuItem<String>(value: 'open', child: Text('打开')),
-              const PopupMenuDivider(),
-              if (widget.currentSection != '等待')
-                const PopupMenuItem<String>(
-                  value: 'move_to_waiting',
-                  child: Text('移动到 等待'),
-                ),
-              if (widget.currentSection != '读取')
-                const PopupMenuItem<String>(
-                  value: 'move_to_read',
-                  child: Text('移动到 读取'),
-                ),
-              if (widget.currentSection != '模板')
-                const PopupMenuItem<String>(
-                  value: 'move_to_template',
-                  child: Text('移动到 模板'),
-                ),
-              if (widget.currentSection != '结果')
-                const PopupMenuItem<String>(
-                  value: 'move_to_result',
-                  child: Text('移动到 结果'),
-                ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(value: 'delete', child: Text('删除')),
-            ],
+          child: ListTile(
+            dense: true,
+            leading: Icon(
+              widget.file.isDirectory ? Icons.folder : Icons.description,
+              size: 20,
+            ),
+            title: Text(widget.file.name, style: const TextStyle(fontSize: 14)),
+            subtitle: Text(
+              widget.file.isDirectory
+                  ? '文件夹'
+                  : '文件 • ${_formatFileSize(widget.file.size)}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8.0),
+            trailing: PopupMenuButton<String>(
+              onSelected: (String value) {
+                switch (value) {
+                  case 'open':
+                    // 对于文件夹，进入下一级；对于文件，执行双击操作
+                    if (widget.file.isDirectory) {
+                      // 进入文件夹
+                      widget.onDoubleTap(); // 这会调用 _navigateToDirectory 方法
+                    } else {
+                      // 打开文件
+                      widget.onDoubleTap(); // 这会调用 FileManager().openFile 方法
+                    }
+                    break;
+                  case 'delete':
+                    widget.onDelete();
+                    break;
+                  case 'move_to_waiting':
+                    widget.onMoveToSection('等待');
+                    break;
+                  case 'move_to_read':
+                    widget.onMoveToSection('读取');
+                    break;
+                  case 'move_to_template':
+                    widget.onMoveToSection('模板');
+                    break;
+                  case 'move_to_result':
+                    widget.onMoveToSection('结果');
+                    break;
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                // 为文件和文件夹都添加打开选项
+                const PopupMenuItem<String>(value: 'open', child: Text('打开')),
+                const PopupMenuDivider(),
+                if (widget.currentSection != '等待')
+                  const PopupMenuItem<String>(
+                    value: 'move_to_waiting',
+                    child: Text('移动到 等待'),
+                  ),
+                if (widget.currentSection != '读取')
+                  const PopupMenuItem<String>(
+                    value: 'move_to_read',
+                    child: Text('移动到 读取'),
+                  ),
+                if (widget.currentSection != '模板')
+                  const PopupMenuItem<String>(
+                    value: 'move_to_template',
+                    child: Text('移动到 模板'),
+                  ),
+                if (widget.currentSection != '结果')
+                  const PopupMenuItem<String>(
+                    value: 'move_to_result',
+                    child: Text('移动到 结果'),
+                  ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(value: 'delete', child: Text('删除')),
+              ],
+            ),
           ),
         ),
       ),
