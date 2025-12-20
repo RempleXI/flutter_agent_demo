@@ -145,13 +145,38 @@ class _MyHomePageState extends State<MyHomePage> {
 
         // 执行工具调用
         logger.i('开始执行工具: ${toolInfo.specificToolName}');
-        toolResult = await ToolDecisionService.executeTool(toolInfo, text);
+        if (toolInfo.specificTool == SpecificTool.autoStorage) {
+          // 自动入库工具需要BuildContext参数
+          toolResult = await ToolDecisionService.executeTool(toolInfo, text, context: context);
+        } else {
+          toolResult = await ToolDecisionService.executeTool(toolInfo, text);
+        }
+        
+        // 检查是否是配置缺失的情况
+        if (toolResult == "CONFIG_MISSING") {
+          logger.i('数据库配置缺失，结束流程');
+          // 直接结束流程，不需要AI进一步处理
+          setState(() {
+            _messages.add(
+              ChatMessage(
+                text: '已执行${toolInfo.specificToolName}操作，但数据库配置缺失，请先配置数据库。',
+                isUser: false,
+                isToolCall: true,
+              ),
+            );
+          });
+          
+          // 结束流程，不需要AI进一步处理
+          return;
+        }
+        
         toolName = toolInfo.displayName;
         logger.i('工具执行结果: $toolResult');
 
         // 检查是否需要刷新界面
         if (toolInfo.specificTool == SpecificTool.tableFill ||
-            toolInfo.specificTool == SpecificTool.directoryView) {
+            toolInfo.specificTool == SpecificTool.directoryView ||
+            toolInfo.specificTool == SpecificTool.autoStorage) {
           needRefresh = true;
         }
 

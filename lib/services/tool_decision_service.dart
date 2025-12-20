@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/chat_message.dart';
 import './ai_prompt_config.dart';
@@ -8,6 +9,7 @@ import '../tools/table_filler.dart';
 import '../tools/xlsx_generator.dart';
 import '../tools/document_table_filler.dart';
 import '../tools/directory_viewer.dart';
+import '../tools/database_filler.dart';
 import '../services/file_manager.dart';
 import '../models/file_info.dart';
 import 'logger_service.dart';
@@ -73,8 +75,21 @@ class ToolDecisionService {
   static Future<ToolInfo> shouldCallTool(String userMessage) async {
     logger.i('开始工具决策过程: $userMessage');
 
-    // 检查是否包含否定词，如果包含则直接使用AI决策模型
-    final negationWords = ['不', '别', '不要', '不能', '不可以', '无需', '无须'];
+    // 检查是否特定词，如果包含则直接使用AI决策模型
+    final negationWords = [
+      '不',
+      '别',
+      '不要',
+      '不能',
+      '不可以',
+      '无需',
+      '无须',
+      '为什么',
+      '什么',
+      '怎么做',
+      '如何',
+      '介绍一下',
+    ];
     final containsNegation = negationWords.any(
       (word) => userMessage.contains(word),
     );
@@ -149,6 +164,16 @@ class ToolDecisionService {
 
 用户问题: 把数据存到数据库里
 回答: AUTO_STORAGE
+
+用户问题: 帮我自动填入数据库
+回答: AUTO_STORAGE
+
+用户问题: 数据库存数据
+回答: AUTO_STORAGE
+
+用户问题: 帮我总结文档，自动填入数据库
+回答: AUTO_STORAGE
+
 
 用户问题: 删除这个文件
 回答: DELETE_FILE
@@ -284,7 +309,7 @@ class ToolDecisionService {
       );
     }
 
-    final autoStorageKeywords = ['自动入库', '存到数据库', '保存到数据库', '数据入库'];
+    final autoStorageKeywords = ['自动入库', '存到数据库', '保存到数据库', '数据入库', '数据库'];
     if (autoStorageKeywords.any((keyword) => message.contains(keyword))) {
       matchedTools.add(
         ToolInfo(
@@ -470,14 +495,27 @@ class ToolDecisionService {
   static ToolInfo analyzeMessage(String message) {
     logger.i('使用关键词匹配分析消息: $message');
 
-    // 检查是否包含否定词，如果包含则直接返回无工具
-    final negationWords = ['不', '别', '不要', '不能', '不可以', '无需', '无须'];
+    // 检查是否包含特定词，如果包含则直接返回无工具
+    final negationWords = [
+      '不',
+      '别',
+      '不要',
+      '不能',
+      '不可以',
+      '无需',
+      '无须',
+      '为什么',
+      '什么',
+      '怎么做',
+      '如何',
+      '介绍一下',
+    ];
     final containsNegation = negationWords.any(
       (word) => message.contains(word),
     );
 
     if (containsNegation) {
-      logger.i('消息中包含否定词，不进行关键词匹配，直接返回无工具');
+      logger.i('消息中包含特定词，不进行关键词匹配，直接返回无工具');
       return ToolInfo(
         category: ToolCategory.none,
         specificTool: SpecificTool.none,
@@ -513,7 +551,11 @@ class ToolDecisionService {
   }
 
   /// 根据工具类型执行相应的工具
-  static Future<String?> executeTool(ToolInfo toolInfo, String query) async {
+  static Future<String?> executeTool(
+    ToolInfo toolInfo,
+    String query, {
+    BuildContext? context,
+  }) async {
     switch (toolInfo.specificTool) {
       case SpecificTool.formatConversion:
         return "已执行格式转换操作";
@@ -525,7 +567,18 @@ class ToolDecisionService {
         return await _executeTableFill();
 
       case SpecificTool.autoStorage:
-        return "已执行自动入库操作";
+        if (context != null) {
+          final result = await DatabaseFiller.fillDatabaseFromDocuments(
+            context,
+          );
+          if (result == null) {
+            // 配置缺失，返回特殊标识
+            return "CONFIG_MISSING";
+          }
+          return result ? "已执行自动入库操作" : "自动入库操作失败，请检查日志或数据库配置";
+        } else {
+          return "执行自动入库操作需要界面上下文";
+        }
 
       case SpecificTool.deleteFile:
         return "已执行删除文件操作";

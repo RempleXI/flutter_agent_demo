@@ -12,6 +12,7 @@ import '../tools/xlsx_generator.dart';
 import '../tools/database_inserter.dart';
 import '../services/logger_service.dart';
 import '../widgets/database_fill_preview_dialog.dart';
+import '../widgets/config_dialog.dart';
 
 /// 数据库填充工具类
 /// 实现从数据库配置检查到生成Excel文件的完整数据库填充流程
@@ -34,7 +35,8 @@ class DatabaseFiller {
   /// 返回值:
   /// - 成功时返回true
   /// - 失败时返回false
-  static Future<bool> fillDatabaseFromDocuments(BuildContext context) async {
+  /// - 配置缺失时返回null
+  static Future<bool?> fillDatabaseFromDocuments(BuildContext context) async {
     logger.i('开始执行数据库填充流程');
     String? generatedFilePath; // 保存生成的文件路径，用于后续删除
 
@@ -44,8 +46,9 @@ class DatabaseFiller {
       await databaseService.init(); // 确保数据库服务已初始化
       if (!databaseService.isConfigValid()) {
         logger.w('数据库配置不完整');
-        // 这里应该通知用户需要配置数据库
-        return false;
+        // 提示用户需要配置数据库
+        await _showDatabaseConfigDialog(context);
+        return null; // 返回null表示配置缺失
       }
 
       // 2. 调用【获取填写数据库需要的表头】
@@ -55,6 +58,10 @@ class DatabaseFiller {
 
       if (headerResult.containsKey('error')) {
         logger.e('获取表头失败: ${headerResult['error']}');
+        // 如果是配置错误，提示用户需要配置数据库
+        if (headerResult['error'].toString().contains('数据库配置不完整')) {
+          await _showDatabaseConfigDialog(context);
+        }
         return false;
       }
 
@@ -162,6 +169,43 @@ class DatabaseFiller {
     }
   }
 
+  /// 显示数据库配置对话框
+  static Future<void> _showDatabaseConfigDialog(BuildContext context) async {
+    logger.i('显示数据库配置提示对话框');
+    
+    // 等待当前帧结束再显示对话框
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('数据库配置缺失'),
+            content: const Text('数据库配置不完整，请前往配置页面完善数据库相关信息。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  // 显示配置对话框
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return const ConfigDialog();
+                    },
+                  );
+                },
+                child: const Text('去配置'),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
   /// 删除生成的Excel文件
   ///
   /// 参数:
@@ -238,3 +282,6 @@ class DatabaseFiller {
     return contentBuffer.toString();
   }
 }
+
+
+
