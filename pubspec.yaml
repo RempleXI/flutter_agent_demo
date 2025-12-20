@@ -48,8 +48,8 @@ dependencies:
   flutter_pdf_text: ^0.9.0
   html: ^0.15.4
   excel: ^2.0.0
-  mysql_client: ^0.0.27  # 使用mysql_client库替代mysql1
   sqlite3: ^3.1.1
+  mysql_client: ^0.0.27
 
 dev_dependencies:
   flutter_test:

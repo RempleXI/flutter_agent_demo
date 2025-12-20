@@ -23,6 +23,7 @@ class DatabaseService {
   late String _databaseTableName;
   late String _databaseType;
   late String _databaseName;
+  bool _isInitialized = false;
 
   /// 初始化数据库服务
   Future<void> init() async {
@@ -36,18 +37,23 @@ class DatabaseService {
     _databaseType = configService.get('databaseType') as String? ?? '';
     _databaseName = configService.get('databaseName') as String? ?? '';
 
+    _isInitialized = true;
     logger.i('数据库服务初始化完成');
   }
 
   /// 检查数据库配置是否完整
   bool isConfigValid() {
-    return _databaseUrl.isNotEmpty &&
+    return _isInitialized && 
+        _databaseUrl.isNotEmpty &&
         _databaseName.isNotEmpty &&
         _databaseType.isNotEmpty &&
         _databaseUsername.isNotEmpty &&
         _databasePassword.isNotEmpty &&
         _databaseTableName.isNotEmpty;
   }
+
+  /// 获取数据库表名
+  String get tableName => _databaseTableName;
 
   /// 获取数据库表的所有列名
   ///
@@ -98,19 +104,18 @@ class DatabaseService {
         userName: _databaseUsername,
         password: _databasePassword,
         databaseName: dbName,
-        secure: false,
       );
-
-      await conn.connect();
+      
+      await conn.connect(timeoutMs: 10000);
       logger.i('成功连接到MySQL数据库');
 
       // 执行查询
-      final result = await conn.execute('SHOW COLUMNS FROM `$tableName`');
-      logger.i('查询成功，查询到${result.numOfRows}个列');
+      final results = await conn.execute('SHOW COLUMNS FROM `$tableName`');
+      logger.i('查询成功，查询到${results.numOfRows}个列');
 
       // 提取列名
       final columns = <String>[];
-      for (final row in result.rows) {
+      for (var row in results.rows) {
         columns.add(row.typedColAt(0) as String);
       }
 
@@ -119,7 +124,7 @@ class DatabaseService {
       logger.e('MySQL查询错误', e);
       rethrow;
     } finally {
-      if (conn != null && conn.connected) {
+      if (conn != null) {
         try {
           await conn.close();
           logger.i('关闭MySQL数据库连接');
@@ -275,10 +280,9 @@ class DatabaseService {
         userName: _databaseUsername,
         password: _databasePassword,
         databaseName: dbName,
-        secure: false,
       );
-
-      await conn.connect();
+      
+      await conn.connect(timeoutMs: 10000);
       logger.i('成功连接到MySQL数据库');
 
       // 构造 INSERT 语句
@@ -291,16 +295,10 @@ class DatabaseService {
           'INSERT INTO `$tableName` ($columnNames) VALUES ($placeholders)';
       logger.i('执行SQL: $sql');
 
-      // 将values转换为Map<String, dynamic>格式
-      final params = <String, dynamic>{};
-      for (int i = 0; i < columns.length; i++) {
-        params['${i + 1}'] = values[i];
-      }
-
-      final result = await conn.execute(sql, params);
-      return result.affectedRows.toInt() > 0;
+      final result = await conn.execute(sql, <String, dynamic>{});
+      return result.affectedRows > BigInt.zero;
     } finally {
-      if (conn != null && conn.connected) {
+      if (conn != null) {
         try {
           await conn.close();
           logger.i('关闭MySQL数据库连接');
@@ -335,11 +333,169 @@ class DatabaseService {
 
       final stmt = db.prepare(sql);
       final result = stmt.execute(data.values.toList());
-      stmt.dispose();
+      stmt.close();
 
       // 对于sqlite3，execute方法返回void，我们无法直接知道是否成功
       // 我们假设执行没有抛出异常即为成功
       return true;
+    } finally {
+      if (db != null) {
+        try {
+          db.dispose();
+          logger.i('关闭SQLite数据库连接');
+        } catch (e) {
+          logger.w('关闭SQLite数据库连接时发生错误: $e');
+        }
+      }
+    }
+  }
+
+  /// 执行批量插入操作
+  ///
+  /// 参数:
+  /// - [dataList]: 要插入的数据列表，每个元素都是一个键值对映射
+  /// - [tableName]: 要插入数据的表名，默认使用配置的表名
+  ///
+  /// 返回值:
+  /// - 成功插入的记录数
+  Future<int> batchInsertData(
+    List<Map<String, dynamic>> dataList, [
+    String? tableName,
+  ]) async {
+    final actualTableName = tableName ?? _databaseTableName;
+
+    if (!isConfigValid()) {
+      throw Exception('数据库配置不完整');
+    }
+
+    if (dataList.isEmpty) {
+      logger.w('插入数据列表为空');
+      return 0;
+    }
+
+    switch (_databaseType.toLowerCase()) {
+      case 'mysql':
+        return _batchInsertMySQLData(dataList, actualTableName);
+
+      case 'sqlite':
+        return _batchInsertSQLiteData(dataList, actualTableName);
+
+      default:
+        throw Exception('暂不支持的数据库类型: $_databaseType，目前支持 MySQL 和 SQLite');
+    }
+  }
+
+  /// MySQL 批量插入数据
+  Future<int> _batchInsertMySQLData(
+    List<Map<String, dynamic>> dataList,
+    String tableName,
+  ) async {
+    logger.i('开始向MySQL数据库批量插入${dataList.length}条数据');
+
+    // 解析数据库URL
+    String host = 'localhost';
+    int port = 3306;
+    String? dbName = _databaseName.isNotEmpty ? _databaseName : null;
+
+    if (_databaseUrl.startsWith('mysql://')) {
+      final uri = Uri.parse(_databaseUrl);
+      host = uri.host;
+      port = uri.port;
+      if (uri.pathSegments.isNotEmpty) {
+        dbName = uri.pathSegments[0];
+      }
+    } else if (_databaseUrl.contains(':')) {
+      final parts = _databaseUrl.split(':');
+      host = parts[0];
+      port = int.tryParse(parts[1]) ?? 3306;
+    } else {
+      host = _databaseUrl;
+    }
+
+    MySQLConnection? conn;
+    try {
+      conn = await MySQLConnection.createConnection(
+        host: host,
+        port: port,
+        userName: _databaseUsername,
+        password: _databasePassword,
+        databaseName: dbName,
+      );
+      
+      await conn.connect(timeoutMs: 10000);
+      logger.i('成功连接到MySQL数据库');
+
+      // 获取第一条数据的列信息作为模板
+      final columns = dataList[0].keys.toList();
+      final placeholders = List.filled(columns.length, '?').join(', ');
+      final columnNames = columns.map((col) => '`$col`').join(', ');
+
+      final sql =
+          'INSERT INTO `$tableName` ($columnNames) VALUES ($placeholders)';
+      logger.i('执行SQL: $sql');
+
+      int insertedCount = 0;
+      for (final data in dataList) {
+        // 确保每条数据都有相同的列
+        final values = columns.map((col) => data[col]).toList();
+
+        final result = await conn.execute(sql, <String, dynamic>{});
+        insertedCount += result.affectedRows.toInt();
+      }
+
+      logger.i('成功插入$insertedCount条记录');
+      return insertedCount;
+    } finally {
+      if (conn != null) {
+        try {
+          await conn.close();
+          logger.i('关闭MySQL数据库连接');
+        } catch (e) {
+          logger.w('关闭MySQL数据库连接时发生错误: $e');
+        }
+      }
+    }
+  }
+
+  /// SQLite 批量插入数据
+  Future<int> _batchInsertSQLiteData(
+    List<Map<String, dynamic>> dataList,
+    String tableName,
+  ) async {
+    logger.i('开始向SQLite数据库批量插入${dataList.length}条数据');
+
+    sqlite.Database? db;
+    try {
+      db = sqlite.sqlite3.open(_databaseUrl);
+      logger.i('成功打开SQLite数据库');
+
+      // 获取第一条数据的列信息作为模板
+      final columns = dataList[0].keys.toList();
+      final placeholders = List.filled(columns.length, '?').join(', ');
+      final columnNames = columns.map((col) => '`$col`').join(', ');
+
+      final sql =
+          'INSERT INTO `$tableName` ($columnNames) VALUES ($placeholders)';
+      logger.i('执行SQL: $sql');
+
+      final stmt = db.prepare(sql);
+      int insertedCount = 0;
+
+      for (final data in dataList) {
+        // 确保每条数据都有相同的列
+        final values = columns.map((col) => data[col]).toList();
+        
+        try {
+          stmt.execute(values);
+          insertedCount++;
+        } catch (e) {
+          logger.e('插入单条记录时出错: $e');
+        }
+      }
+
+      stmt.close();
+      logger.i('成功插入$insertedCount条记录');
+      return insertedCount;
     } finally {
       if (db != null) {
         try {
@@ -424,10 +580,9 @@ class DatabaseService {
         userName: _databaseUsername,
         password: _databasePassword,
         databaseName: dbName,
-        secure: false,
       );
-
-      await conn.connect();
+      
+      await conn.connect(timeoutMs: 10000);
       logger.i('成功连接到MySQL数据库');
 
       // 构造 SELECT 语句
@@ -436,19 +591,14 @@ class DatabaseService {
           : '*';
 
       var sql = 'SELECT $columnNames FROM `$tableName`';
-      final whereValues = <String, dynamic>{};
+      final List<dynamic> whereValues = [];
 
       if (whereConditions != null && whereConditions.isNotEmpty) {
         final whereClause = whereConditions.keys
             .map((key) => '`$key` = ?')
             .join(' AND ');
         sql += ' WHERE $whereClause';
-
-        // 将whereConditions转换为索引映射
-        final keys = whereConditions.keys.toList();
-        for (int i = 0; i < keys.length; i++) {
-          whereValues['${i + 1}'] = whereConditions[keys[i]];
-        }
+        whereValues.addAll(whereConditions.values);
       }
 
       if (limit != null && limit > 0) {
@@ -456,30 +606,132 @@ class DatabaseService {
       }
 
       logger.i('执行SQL: $sql');
-
-      final result = await conn.execute(sql, whereValues);
+      final results = await conn.execute(sql, <String, dynamic>{});
 
       // 将结果转换为 List<Map<String, dynamic>>
       final List<Map<String, dynamic>> rows = [];
-      for (final row in result.rows) {
-        final Map<String, dynamic> rowData = {};
-        // 参考database_header_fetcher.dart中的做法，逐个访问列数据
-        // 由于不知道确切的列数量和名称，我们只能通过已知的列名来访问
-        // 这里假设最多处理10列数据，实际情况可能需要动态获取列数
-        for (int i = 0; i < 10; i++) {
-          try {
-            rowData['col_$i'] = row.typedColAt(i);
-          } catch (e) {
-            // 当访问超出范围的列时会抛出异常，此时停止访问
-            break;
+      
+      // 检查是否是聚合查询（如COUNT, SUM等）
+      bool isAggregateQuery = sql.trim().toUpperCase().startsWith('SELECT') && 
+                             (sql.toUpperCase().contains('COUNT(') || 
+                              sql.toUpperCase().contains('SUM(') || 
+                              sql.toUpperCase().contains('AVG(') || 
+                              sql.toUpperCase().contains('MAX(') || 
+                              sql.toUpperCase().contains('MIN('));
+      
+      if (isAggregateQuery) {
+        // 处理聚合查询，直接使用列索引访问结果
+        for (final row in results.rows) {
+          final Map<String, dynamic> rowData = <String, dynamic>{};
+          
+          // 尝试从SQL中提取别名，例如 "SELECT COUNT(*) as count"
+          // 改进的别名提取逻辑，支持更多情况
+          final aliasRegExp = RegExp(r'(?:\b(?:COUNT|SUM|AVG|MAX|MIN)\([^)]*\)|\*)\s+(?:AS\s+)?(\w+)', caseSensitive: false);
+          final aliasMatch = aliasRegExp.firstMatch(sql);
+          
+          if (aliasMatch != null && aliasMatch.groupCount >= 1) {
+            // 使用找到的别名作为键名
+            final alias = aliasMatch.group(1)!;
+            try {
+              final value = row.typedColAt(0);
+              // 确保数值类型正确
+              if (value is int) {
+                rowData[alias] = value;
+              } else if (value is BigInt) {
+                // MySQL可能返回BigInt类型
+                rowData[alias] = value.toInt();
+              } else if (value is String) {
+                // 尝试解析字符串为整数
+                rowData[alias] = int.tryParse(value.trim()) ?? double.tryParse(value.trim()) ?? value;
+              } else if (value is double) {
+                // 如果是小数，根据聚合函数类型决定是否转换为整数
+                if (sql.toUpperCase().contains('COUNT') || 
+                    sql.toUpperCase().contains('SUM') || 
+                    sql.toUpperCase().contains('AVG')) {
+                  // COUNT、SUM和AVG通常返回整数或需要转为整数
+                  rowData[alias] = value.toInt();
+                } else {
+                  rowData[alias] = value;
+                }
+              } else {
+                rowData[alias] = value ?? 0;
+              }
+            } catch (e) {
+              logger.w('访问聚合查询结果时出错: $e');
+              rowData[alias] = 0;
+            }
+          } else {
+            // 没有找到别名，使用默认名称
+            try {
+              final value = row.typedColAt(0);
+              // 确保数值类型正确
+              if (value is int) {
+                rowData['col_0'] = value;
+              } else if (value is BigInt) {
+                // MySQL可能返回BigInt类型
+                rowData['col_0'] = value.toInt();
+              } else if (value is String) {
+                // 尝试解析字符串为整数
+                rowData['col_0'] = int.tryParse(value.trim()) ?? double.tryParse(value.trim()) ?? value;
+              } else if (value is double) {
+                // 如果是小数，根据聚合函数类型决定是否转换为整数
+                if (sql.toUpperCase().contains('COUNT') || 
+                    sql.toUpperCase().contains('SUM') || 
+                    sql.toUpperCase().contains('AVG')) {
+                  // COUNT、SUM和AVG通常返回整数或需要转为整数
+                  rowData['col_0'] = value.toInt();
+                } else {
+                  rowData['col_0'] = value;
+                }
+              } else {
+                rowData['col_0'] = value ?? 0;
+              }
+            } catch (e) {
+              logger.w('访问聚合查询结果时出错: $e');
+              rowData['col_0'] = 0;
+            }
+          }
+          rows.add(rowData);
+        }
+      } else {
+        // 处理普通查询，使用getTableColumns获取列名
+        try {
+          final tableColumns = await _fetchMySQLColumns(_databaseTableName);
+          for (final row in results.rows) {
+            final Map<String, dynamic> rowData = <String, dynamic>{};
+            for (int i = 0; i < tableColumns.length; i++) {
+              try {
+                rowData[tableColumns[i]] = row.typedColAt(i);
+              } catch (e) {
+                logger.w('访问查询结果时出错，列索引: $i, 错误: $e');
+                rowData[tableColumns[i]] = null;
+              }
+            }
+            rows.add(rowData);
+          }
+        } catch (e) {
+          logger.e('获取表列信息时出错: $e');
+          // fallback: 使用通用的列访问方式
+          for (final row in results.rows) {
+            final Map<String, dynamic> rowData = <String, dynamic>{};
+            // 由于无法获取确切的列数，我们尝试访问前几列
+            for (int i = 0; i < 10; i++) {  // 假设最多10列
+              try {
+                rowData['col_$i'] = row.typedColAt(i);
+              } catch (e) {
+                // 当访问超出范围的列时会抛出异常，此时停止访问
+                break;
+              }
+            }
+            rows.add(rowData);
           }
         }
-        rows.add(rowData);
       }
 
+      logger.i('查询返回${rows.length}条记录');
       return rows;
     } finally {
-      if (conn != null && conn.connected) {
+      if (conn != null) {
         try {
           await conn.close();
           logger.i('关闭MySQL数据库连接');
@@ -528,18 +780,244 @@ class DatabaseService {
 
       final stmt = db.prepare(sql);
       final resultSet = stmt.select(whereValues);
-      stmt.dispose();
+      stmt.close();
 
       // 将结果转换为 List<Map<String, dynamic>>
       final List<Map<String, dynamic>> rows = [];
       for (final row in resultSet) {
-        final Map<String, dynamic> rowData = {};
+        final Map<String, dynamic> rowData = <String, dynamic>{};
         row.forEach((key, value) {
-          rowData[key] = value;
+          rowData[key.toString()] = value;
         });
         rows.add(rowData);
       }
 
+      return rows;
+    } finally {
+      if (db != null) {
+        try {
+          db.dispose();
+          logger.i('关闭SQLite数据库连接');
+        } catch (e) {
+          logger.w('关闭SQLite数据库连接时发生错误: $e');
+        }
+      }
+    }
+  }
+
+  /// 执行自定义SQL查询
+  ///
+  /// 参数:
+  /// - [sql]: 要执行的SQL语句
+  /// - [params]: SQL参数（可选）
+  ///
+  /// 返回值:
+  /// - 查询结果列表
+  Future<List<Map<String, dynamic>>> executeQuery(
+    String sql, [
+    List<dynamic>? params,
+  ]) async {
+    if (!isConfigValid()) {
+      throw Exception('数据库配置不完整');
+    }
+
+    switch (_databaseType.toLowerCase()) {
+      case 'mysql':
+        return _executeMySQLQuery(sql, params);
+
+      case 'sqlite':
+        return _executeSQLiteQuery(sql, params);
+
+      default:
+        throw Exception('暂不支持的数据库类型: $_databaseType，目前支持 MySQL 和 SQLite');
+    }
+  }
+
+  /// 执行MySQL自定义查询
+  Future<List<Map<String, dynamic>>> _executeMySQLQuery(
+    String sql, [
+    List<dynamic>? params,
+  ]) async {
+    logger.i('开始执行MySQL自定义查询');
+
+    // 解析数据库URL
+    String host = 'localhost';
+    int port = 3306;
+    String? dbName = _databaseName.isNotEmpty ? _databaseName : null;
+
+    if (_databaseUrl.startsWith('mysql://')) {
+      final uri = Uri.parse(_databaseUrl);
+      host = uri.host;
+      port = uri.port;
+      if (uri.pathSegments.isNotEmpty) {
+        dbName = uri.pathSegments[0];
+      }
+    } else if (_databaseUrl.contains(':')) {
+      final parts = _databaseUrl.split(':');
+      host = parts[0];
+      port = int.tryParse(parts[1]) ?? 3306;
+    } else {
+      host = _databaseUrl;
+    }
+
+    MySQLConnection? conn;
+    try {
+      conn = await MySQLConnection.createConnection(
+        host: host,
+        port: port,
+        userName: _databaseUsername,
+        password: _databasePassword,
+        databaseName: dbName,
+      );
+      
+      await conn.connect(timeoutMs: 10000);
+      logger.i('成功连接到MySQL数据库');
+
+      logger.i('执行SQL: $sql');
+      final results = await conn.execute(sql, <String, dynamic>{});
+
+      // 将结果转换为 List<Map<String, dynamic>>
+      final List<Map<String, dynamic>> rows = [];
+      
+      // 检查是否是聚合查询（如COUNT, SUM等）
+      bool isAggregateQuery = sql.trim().toUpperCase().startsWith('SELECT') && 
+                             (sql.toUpperCase().contains('COUNT(') || 
+                              sql.toUpperCase().contains('SUM(') || 
+                              sql.toUpperCase().contains('AVG(') || 
+                              sql.toUpperCase().contains('MAX(') || 
+                              sql.toUpperCase().contains('MIN('));
+      
+      if (isAggregateQuery) {
+        // 处理聚合查询，直接使用列索引访问结果
+        for (final row in results.rows) {
+          final Map<String, dynamic> rowData = <String, dynamic>{};
+          
+          // 尝试从SQL中提取别名，例如 "SELECT COUNT(*) as count"
+          // 改进的别名提取逻辑，支持更多情况
+          final aliasRegExp = RegExp(r'(?:\b(?:COUNT|SUM|AVG|MAX|MIN)\([^)]*\)|\*)\s+(?:AS\s+)?(\w+)', caseSensitive: false);
+          final aliasMatch = aliasRegExp.firstMatch(sql);
+          
+          if (aliasMatch != null && aliasMatch.groupCount >= 1) {
+            // 使用找到的别名作为键名
+            final alias = aliasMatch.group(1)!;
+            try {
+              final value = row.typedColAt(0);
+              // 确保数值类型正确
+              if (value is int) {
+                rowData[alias] = value;
+              } else if (value is String) {
+                rowData[alias] = int.tryParse(value) ?? value;
+              } else {
+                rowData[alias] = value;
+              }
+            } catch (e) {
+              logger.w('访问聚合查询结果时出错: $e');
+              rowData[alias] = 0;
+            }
+          } else {
+            // 没有找到别名，使用默认名称
+            try {
+              final value = row.typedColAt(0);
+              // 确保数值类型正确
+              if (value is int) {
+                rowData['col_0'] = value;
+              } else if (value is String) {
+                rowData['col_0'] = int.tryParse(value) ?? value;
+              } else {
+                rowData['col_0'] = value;
+              }
+            } catch (e) {
+              logger.w('访问聚合查询结果时出错: $e');
+              rowData['col_0'] = 0;
+            }
+          }
+          rows.add(rowData);
+        }
+      } else {
+        // 处理普通查询，使用getTableColumns获取列名
+        try {
+          final tableColumns = await _fetchMySQLColumns(_databaseTableName);
+          for (final row in results.rows) {
+            final Map<String, dynamic> rowData = <String, dynamic>{};
+            for (int i = 0; i < tableColumns.length; i++) {
+              try {
+                rowData[tableColumns[i]] = row.typedColAt(i);
+              } catch (e) {
+                logger.w('访问查询结果时出错，列索引: $i, 错误: $e');
+                rowData[tableColumns[i]] = null;
+              }
+            }
+            rows.add(rowData);
+          }
+        } catch (e) {
+          logger.e('获取表列信息时出错: $e');
+          // fallback: 使用通用的列访问方式
+          for (final row in results.rows) {
+            final Map<String, dynamic> rowData = <String, dynamic>{};
+            // 由于无法获取确切的列数，我们尝试访问前几列
+            for (int i = 0; i < 10; i++) {  // 假设最多10列
+              try {
+                rowData['col_$i'] = row.typedColAt(i);
+              } catch (e) {
+                // 当访问超出范围的列时会抛出异常，此时停止访问
+                break;
+              }
+            }
+            rows.add(rowData);
+          }
+        }
+      }
+
+      logger.i('查询返回${rows.length}条记录');
+      return rows;
+    } on Exception catch (e) {
+      logger.e('执行MySQL查询时发生错误: $e');
+      rethrow;
+    } finally {
+      if (conn != null) {
+        try {
+          await conn.close();
+          logger.i('关闭MySQL数据库连接');
+        } catch (e) {
+          logger.w('关闭MySQL数据库连接时发生错误: $e');
+        }
+      }
+    }
+  }
+
+  /// 执行SQLite自定义查询
+  Future<List<Map<String, dynamic>>> _executeSQLiteQuery(
+    String sql, [
+    List<dynamic>? params,
+  ]) async {
+    logger.i('开始执行SQLite自定义查询');
+
+    sqlite.Database? db;
+    try {
+      db = sqlite.sqlite3.open(_databaseUrl);
+      logger.i('成功打开SQLite数据库');
+
+      logger.i('执行SQL: $sql');
+      final List<sqlite.Row> resultSet;
+      if (params != null && params.isNotEmpty) {
+        final stmt = db.prepare(sql);
+        resultSet = stmt.select(params);
+        stmt.close();
+      } else {
+        resultSet = db.select(sql);
+      }
+
+      // 将结果转换为 List<Map<String, dynamic>>
+      final List<Map<String, dynamic>> rows = [];
+      for (final row in resultSet) {
+        final Map<String, dynamic> rowData = <String, dynamic>{};
+        row.forEach((k, v) {
+          rowData[k.toString()] = v;
+        });
+        rows.add(rowData);
+      }
+
+      logger.i('查询返回${rows.length}条记录');
       return rows;
     } finally {
       if (db != null) {
