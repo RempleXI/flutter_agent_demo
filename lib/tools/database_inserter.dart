@@ -5,6 +5,7 @@ import 'package:excel/excel.dart';
 import 'package:path/path.dart' as path;
 import 'dart:convert';
 import '../services/file_manager.dart';
+import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import 'package:logging/logging.dart';
 
@@ -142,6 +143,24 @@ class DatabaseInserter {
       logger.d('SQL语句 ${i + 1}: ${statements[i]}');
     }
     
+    // 执行SQL语句插入数据到数据库
+    final insertResult = await _executeSqlStatements(statements, tableName);
+    if (!insertResult['success']) {
+      return {
+        'success': false,
+        'message': insertResult['message']
+      };
+    }
+    
+    // 验证数据是否成功插入
+    final verifyResult = await _verifyDataInsertion(tableName, count);
+    if (!verifyResult['success']) {
+      return {
+        'success': false,
+        'message': verifyResult['message']
+      };
+    }
+    
     // 输出成功填表信息到终端
     final successMessage = '成功处理文件"$fileName"，共生成$count条记录的SQL语句';
     logger.i('成功处理: $successMessage');
@@ -153,6 +172,146 @@ class DatabaseInserter {
       'count': count,
       'formattedText': formattedText
     };
+  }
+
+  /// 执行SQL语句将数据插入数据库
+  ///
+  /// 参数:
+  /// - statements: 要执行的SQL语句列表
+  /// - tableName: 目标数据库表名
+  ///
+  /// 返回值:
+  /// - Future<Map<String, dynamic>>: 包含操作结果的映射
+  static Future<Map<String, dynamic>> _executeSqlStatements(List<String> statements, String tableName) async {
+    try {
+      // 获取数据库服务实例
+      final databaseService = DatabaseService();
+      await databaseService.init();
+      
+      if (!databaseService.isConfigValid()) {
+        return {
+          'success': false,
+          'message': '数据库配置无效'
+        };
+      }
+      
+      // 执行每条SQL语句
+      for (int i = 0; i < statements.length; i++) {
+        final statement = statements[i];
+        logger.i('执行SQL语句 ${i + 1}/${statements.length}: $statement');
+        
+        try {
+          // 使用数据库服务执行SQL语句
+          await databaseService.executeQuery(statement);
+          logger.i('SQL语句执行成功');
+        } catch (e) {
+          logger.e('执行SQL语句时发生错误: $e');
+          return {
+            'success': false,
+            'message': '执行SQL语句时发生错误: $e'
+          };
+        }
+      }
+      
+      return {
+        'success': true,
+        'message': '成功执行${statements.length}条SQL语句'
+      };
+    } catch (e) {
+      logger.e('执行SQL语句时发生未知错误: $e');
+      return {
+        'success': false,
+        'message': '执行SQL语句时发生未知错误: $e'
+      };
+    }
+  }
+
+  /// 验证数据是否成功插入到数据库中
+  ///
+  /// 参数:
+  /// - tableName: 目标数据库表名
+  /// - expectedCount: 期望插入的记录数
+  ///
+  /// 返回值:
+  /// - Future<Map<String, dynamic>>: 包含验证结果的映射
+  static Future<Map<String, dynamic>> _verifyDataInsertion(String tableName, int expectedCount) async {
+    try {
+      // 获取数据库服务实例
+      final databaseService = DatabaseService();
+      await databaseService.init();
+      
+      if (!databaseService.isConfigValid()) {
+        return {
+          'success': false,
+          'message': '数据库配置无效'
+        };
+      }
+      
+      // 构造查询语句，获取表中的数据
+      final query = 'SELECT COUNT(*) as count FROM `$tableName`';
+      
+      logger.i('执行验证查询: $query');
+      final results = await databaseService.executeQuery(query);
+      
+      if (results.isEmpty) {
+        return {
+          'success': false,
+          'message': '验证失败：查询不到任何数据'
+        };
+      }
+      
+      // 从结果中提取计数，使用键名访问而不是索引
+      int actualCount = 0;
+      try {
+        // 首先尝试使用别名'count'访问
+        if (results[0].containsKey('count')) {
+          final countValue = results[0]['count'];
+          // 处理不同类型的返回值（可能是int、String或其他类型）
+          if (countValue is int) {
+            actualCount = countValue;
+          } else if (countValue is String) {
+            actualCount = int.tryParse(countValue) ?? 0;
+          } else {
+            actualCount = 0;
+          }
+        } else {
+          // 如果没有'count'键，尝试使用默认的'col_0'
+          final countValue = results[0]['col_0'];
+          // 处理不同类型的返回值（可能是int、String或其他类型）
+          if (countValue is int) {
+            actualCount = countValue;
+          } else if (countValue is String) {
+            actualCount = int.tryParse(countValue) ?? 0;
+          } else {
+            actualCount = 0;
+          }
+        }
+      } catch (e) {
+        logger.e('从查询结果中提取计数时发生错误: $e');
+        // 出错时设为0，让后续的验证失败
+        actualCount = 0;
+      }
+      
+      logger.i('验证查询返回计数: $actualCount');
+      
+      if (actualCount < expectedCount) {
+        return {
+          'success': false,
+          'message': '验证失败：期望插入$expectedCount条记录，但实际只有$actualCount条'
+        };
+      }
+      
+      return {
+        'success': true,
+        'message': '成功验证数据插入，共查询到$actualCount条记录'
+      };
+    } catch (e) {
+      logger.e('验证数据插入时发生错误: $e');
+      return {
+        'success': false,
+        'message': '验证数据插入时发生错误: $e'
+      };
+    }
   }
   
   /// 根据解析的数据生成数据库插入语句
