@@ -36,7 +36,8 @@ class DatabaseFiller {
   /// - 成功时返回true
   /// - 失败时返回false
   /// - 配置缺失时返回null
-  static Future<bool?> fillDatabaseFromDocuments(BuildContext context) async {
+  /// - 用户取消时返回"USER_CANCELLED"
+  static Future<Object?> fillDatabaseFromDocuments(BuildContext context) async {
     logger.i('开始执行数据库填充流程');
     String? generatedFilePath; // 保存生成的文件路径，用于后续删除
 
@@ -131,7 +132,12 @@ class DatabaseFiller {
               },
             );
           },
-        );
+        ).then((_) {
+          // 当对话框被关闭时（包括点击取消按钮），确保completer被完成
+          if (!completer.isCompleted) {
+            completer.complete(false);
+          }
+        });
       });
       
       // 等待用户点击下一步
@@ -140,7 +146,8 @@ class DatabaseFiller {
         logger.i('用户取消了数据库填充操作');
         // 步骤8: 用户取消时删除生成的文件
         await _deleteGeneratedFile(generatedFilePath);
-        return false;
+        // 返回特定标识，表示用户取消操作，类似于CONFIG_MISSING的处理方式
+        return "USER_CANCELLED";
       }
 
       // 7. 用户点击下一步，调用【Excel转化为数据库语句并执行】，完成
@@ -282,6 +289,12 @@ class DatabaseFiller {
     return contentBuffer.toString();
   }
 }
+
+
+
+
+
+
 
 
 

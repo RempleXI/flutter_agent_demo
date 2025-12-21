@@ -106,7 +106,7 @@ class _DatabaseFillPreviewDialogState extends State<DatabaseFillPreviewDialog> {
             Text(
               widget.fileExists
                   ? '• 双击或长按文件可使用默认程序打开'
-                  : '• 请先确保结果区存在"待填入数据库.xlsx"文件',
+                  : '• 请先确保结果区存在"待填入数据库内容.xlsx"文件',
             ),
             const Text('• 确认无误后点击"下一步"完成入库'),
           ],

@@ -575,7 +575,14 @@ class ToolDecisionService {
             // 配置缺失，返回特殊标识
             return "CONFIG_MISSING";
           }
-          return result ? "已执行自动入库操作" : "自动入库操作失败，请检查日志或数据库配置";
+          
+          // 检查是否是用户取消操作
+          if (result == "USER_CANCELLED") {
+            // 用户取消操作，返回特殊标识
+            return "USER_CANCELLED";
+          }
+          
+          return result == true ? "已执行自动入库操作" : "自动入库操作失败，请检查日志或数据库配置";
         } else {
           return "执行自动入库操作需要界面上下文";
         }

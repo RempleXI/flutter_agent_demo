@@ -58,7 +58,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _textFieldFocusNode = FocusNode();
   bool _isLoading = false;
-  
+
   // 防止重复提交配置的标志位
   bool _isConfiguring = false;
 
@@ -90,11 +90,11 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _showConfigDialog() async {
     // 防止重复点击
     if (_isConfiguring) return;
-    
+
     setState(() {
       _isConfiguring = true;
     });
-    
+
     final result = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -125,7 +125,9 @@ class _MyHomePageState extends State<MyHomePage> {
       // 使用双AI机制判断是否需要调用工具
       logger.i('开始工具决策过程');
       final toolInfo = await ToolDecisionService.shouldCallTool(text);
-      logger.i('工具决策结果: 类别=${toolInfo.category}, 具体工具=${toolInfo.specificTool}');
+      logger.i(
+        '工具决策结果: 类别=${toolInfo.category}, 具体工具=${toolInfo.specificTool}',
+      );
 
       String? toolResult;
       String? toolName;
@@ -147,11 +149,15 @@ class _MyHomePageState extends State<MyHomePage> {
         logger.i('开始执行工具: ${toolInfo.specificToolName}');
         if (toolInfo.specificTool == SpecificTool.autoStorage) {
           // 自动入库工具需要BuildContext参数
-          toolResult = await ToolDecisionService.executeTool(toolInfo, text, context: context);
+          toolResult = await ToolDecisionService.executeTool(
+            toolInfo,
+            text,
+            context: context,
+          );
         } else {
           toolResult = await ToolDecisionService.executeTool(toolInfo, text);
         }
-        
+
         // 检查是否是配置缺失的情况
         if (toolResult == "CONFIG_MISSING") {
           logger.i('数据库配置缺失，结束流程');
@@ -165,11 +171,29 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             );
           });
-          
+
           // 结束流程，不需要AI进一步处理
           return;
         }
-        
+
+        // 检查是否是用户取消操作的情况
+        if (toolResult == "USER_CANCELLED") {
+          logger.i('用户取消了操作，结束流程');
+          // 直接结束流程，不需要AI进一步处理
+          setState(() {
+            _messages.add(
+              ChatMessage(
+                text: '已取消${toolInfo.specificToolName}操作',
+                isUser: false,
+                isToolCall: true,
+              ),
+            );
+          });
+
+          // 结束流程，不需要AI进一步处理
+          return;
+        }
+
         toolName = toolInfo.displayName;
         logger.i('工具执行结果: $toolResult');
 
