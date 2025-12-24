@@ -8,28 +8,24 @@
 
 ### 1. 文档处理
 
-- 格式转换：支持多种文档格式之间的相互转换
-- 内容总结：自动生成文档摘要和关键信息提取
+- 格式转换：支持多种文档格式之间的相互转换（未实现）
+- 内容总结：自动生成文档摘要和关键信息提取（未实现）
 - 自动填表：根据文档内容自动填充 Excel 表格
 - 自动入库：将处理后的数据自动存储到数据库
 
 ### 2. 文件管理
 
-- 删除文件：安全删除指定文件或文件夹
+- 删除文件：安全删除指定文件或文件夹（未接入 ai）
 - 查看目录：浏览工作区的文件结构和信息
-- 移动文件：在不同目录间移动文件或文件夹
-- 复制文件：创建文件或文件夹的副本
-- 重命名文件：修改文件或文件夹名称
+- 移动文件：在不同目录间移动文件或文件夹（未接入 ai）
+- 复制文件：创建文件或文件夹的副本（未实现）
+- 重命名文件：修改文件或文件夹名称（未接入 ai）
 
 ### 3. 智能 AI 交互
 
 - 三级 AI 机制：针对不同类型的任务使用专门优化的 AI 模型
 - 工具调用：根据用户需求智能调用相应工具
 - 实时反馈：提供清晰的工具调用状态和结果反馈
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
 
 ## 配置 API 密钥
 
@@ -38,6 +34,7 @@ This project is a starting point for a Flutter application.
 首次运行应用时，会弹出配置对话框，您也可以在应用右上角点击设置按钮来配置 API 密钥。
 
 应用会在系统特定目录中创建配置文件 `app_config.json`：
+
 - Windows: `%APPDATA%/flutter_agent_demo/app_config.json`
 - macOS: `~/Library/Application Support/flutter_agent_demo/app_config.json`
 - Linux: `~/.local/share/flutter_agent_demo/app_config.json`
@@ -53,14 +50,3 @@ This project is a starting point for a Flutter application.
 - **分析 AI 模型** (`analysisModelName`)：专门用于字段提取等分析任务
 
 这三个模型都可以在配置对话框中修改。默认情况下，我们使用 DeepSeek-V3.2 作为对话和分析模型，Qwen2.5-7B-Instruct 作为决策模型。
-
-## Resources
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
