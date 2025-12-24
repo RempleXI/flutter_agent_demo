@@ -44,9 +44,15 @@ class FileManager {
         final file = entity is File ? entity : null;
         final dir = entity is Directory ? entity : null;
         
+        // 检查是否为隐藏文件或临时文件
+        final fileName = path.basename(entity.path);
+        if (_isHiddenOrTempFile(fileName)) {
+          continue; // 跳过隐藏文件或临时文件
+        }
+        
         final stat = await entity.stat();
         files.add(FileInfo(
-          name: path.basename(entity.path),
+          name: fileName,
           path: entity.path,
           isDirectory: dir != null,
           modified: stat.modified,
@@ -59,6 +65,46 @@ class FileManager {
       // 出错时返回空列表
       return [];
     }
+  }
+
+  // 检查文件是否为隐藏文件或临时文件
+  bool _isHiddenOrTempFile(String fileName) {
+    // 以点开头的文件（如 .DS_Store, .gitignore 等）
+    if (fileName.startsWith('.')) {
+      return true;
+    }
+    
+    // Office临时文件
+    if (fileName.startsWith('~\$') || // Excel临时文件
+        fileName.endsWith('.tmp') || // 临时文件
+        fileName.endsWith('.temp')) { // 临时文件
+      return true;
+    }
+    
+    // 常见的隐藏文件和临时文件模式
+    const hiddenPatterns = [
+      '.DS_Store', // macOS隐藏文件
+      'Thumbs.db', // Windows缩略图缓存
+      'desktop.ini', // Windows桌面配置
+      'Icon\r', // macOS图标文件
+    ];
+    
+    if (hiddenPatterns.contains(fileName)) {
+      return true;
+    }
+    
+    // 检查常见临时文件扩展名
+    const tempExtensions = [
+      '.tmp', '.temp', '.cache', '.bak', '.log'
+    ];
+    
+    for (final ext in tempExtensions) {
+      if (fileName.toLowerCase().endsWith(ext)) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   // 选择并导入文件到指定区域
